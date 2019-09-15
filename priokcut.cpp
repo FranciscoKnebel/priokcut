@@ -1,4 +1,5 @@
 //////////////////////////////////////////////////////////////////////////////////
+//
 // Company: Universidade Federal do Rio Grande do Sul
 // Engineer: Rafael de Oliveira Calçada
 // 
@@ -32,7 +33,15 @@ typedef struct v {
 	int label;
 	list<edge*>* out_edges;
 	list<edge*>* in_edges;
+	void* cuts;
 } vertex;
+
+// the cuts
+typedef struct c {
+	float cost;
+	list<vertex*>* inputs;
+	int gen;
+} cut;
 
 // these lists describes the AIG
 list<edge*> edges;
@@ -43,6 +52,7 @@ list<vertex*> vertices;
 list<vertex*>* next_layer;
 list<vertex*>* current_layer;
 list<vertex*>* preceding_vertices;
+list<cut*>* winner_implementations;
 
 
 /*
@@ -119,6 +129,7 @@ void create_graph_from_input_file(char* filename)
 			new_input->label = new_input_label;
 			new_input->out_edges = new list<edge*>;
 			new_input->in_edges = NULL;
+			new_input->cuts = NULL;
 			if(vertex_exists(&vertices, new_input_label))
 			{
 				cerr << "Failed to add the input vertex to the list. Label " << new_input_label << " already exists." << endl;
@@ -168,6 +179,7 @@ void create_graph_from_input_file(char* filename)
 			new_vertex->label = new_vertex_label;
 			new_vertex->out_edges = new list<edge*>;
 			new_vertex->in_edges = new list<edge*>;
+			new_vertex->cuts = NULL;
 			if(vertex_exists(&vertices, new_vertex_label))
 			{
 				cerr << "Failed to add the vertex to the list. Label " << new_vertex_label << " already exists." << endl;
@@ -250,7 +262,61 @@ void debug_graph()
 	}
 }
 
+// prints a vertex and its cuts on screen
+void print_cuts(vertex* v)
+{
+	cout << "v(" << v->label << ")";
+	list<cut*>* vertex_cuts = (list<cut*>*) v->cuts;
+	if(vertex_cuts != NULL && vertex_cuts->size() > 0) {
+		cout << " has cuts: ";
+		for(std::list<cut*>::iterator it = vertex_cuts->begin(); it != vertex_cuts->end(); ++it)
+		{
 
+			list<vertex*>* cut_inputs = (*it)->inputs;
+			cout << endl << "  { ";
+			for(std::list<vertex*>::iterator it2 = cut_inputs->begin(); it2 != cut_inputs->end(); ++it2) cout << (*it2)->label << " ";
+			cout << "} with cost " << (*it)->cost;
+		}
+	}
+	cout << endl;
+}
+
+// returns the minimal cost of all the cuts of a vertex
+float winner_cost(vertex* v)
+{
+	list<cut*>* vertex_cuts = (list<cut*>*) v->cuts;
+	if(vertex_cuts != NULL && vertex_cuts->size() > 0) {
+		std::list<cut*>::iterator first = vertex_cuts->begin();
+		float min_cost = (*first)->cost;
+		for(std::list<cut*>::iterator it = vertex_cuts->begin(); it != vertex_cuts->end(); ++it)
+			if((*it)->cost < min_cost) min_cost = (*it)->cost;
+		return min_cost;
+	}
+	else 
+	{
+		cerr << "Fail. Found a vertex that has no cuts." << endl;
+		exit(-1);
+	}
+}
+
+// returns a pointer for the cut with the minimal cost
+cut* winner_cut(vertex* v)
+{
+	list<cut*>* vertex_cuts = (list<cut*>*) v->cuts;
+	if(vertex_cuts != NULL && vertex_cuts->size() > 0) {
+		std::list<cut*>::iterator first = vertex_cuts->begin();
+		cut* min_cut = *first;
+		float min_cost = (*first)->cost;
+		for(std::list<cut*>::iterator it = vertex_cuts->begin(); it != vertex_cuts->end(); ++it)
+			if((*it)->cost < min_cost) min_cut = (*it);
+		return min_cut;
+	}
+	else 
+	{
+		cerr << "Fail. Found a vertex that has no cuts." << endl;
+		exit(-1);
+	}
+}
 
 /*
  * MAIN FUNCTION: COMPUTES THE PRIORITY K-CUT
@@ -286,14 +352,28 @@ int main(int argc, char* argv[])
 	 *
 	 */
 	
+	// initialization
+	winner_implementations = new list<cut*>;
 	current_layer = &inputs;
 	preceding_vertices = new list<vertex*>;
 	for(std::list<vertex*>::iterator it = inputs.begin(); it != inputs.end(); ++it)	preceding_vertices->push_back(*it);
 
+	// all the inputs have cuts with 0 cost
+	for(std::list<vertex*>::iterator it = inputs.begin(); it != inputs.end(); ++it)
+	{
+		list<cut*>* vertex_cuts = new list<cut*>;
+		cut* new_cut = (cut*)malloc(sizeof(cut));
+		new_cut->cost = 0.0;
+		new_cut->inputs = new list<vertex*>;
+		new_cut->inputs->push_back(*it);
+		vertex_cuts->push_back(new_cut);
+		(*it)->cuts = (void*)vertex_cuts;
+	}
+
 	int ln = 1;
 
 	cout << "Inputs (layer n. " << ln << "):" << endl;
-	for(std::list<vertex*>::iterator it = inputs.begin(); it != inputs.end(); ++it) cout << "v(" << (*it)->label << ") " << endl;
+	for(std::list<vertex*>::iterator it = inputs.begin(); it != inputs.end(); ++it) print_cuts(*it);
 	ln++;
 
 	do
@@ -346,15 +426,100 @@ int main(int argc, char* argv[])
 		// then, remove the vertices from the next_layer set
 		for(std::list<vertex*>::iterator it = remove_list->begin(); it != remove_list->end(); ++it) next_layer->remove(*it);
 
-		cout << "Layer n. " << ln << ":" << endl;
-		for(std::list<vertex*>::iterator it = next_layer->begin(); it != next_layer->end(); ++it)	cout << "v(" << (*it)->label << ") " << endl;
+		/****************************************************
+		 *
+		 * EVALUATE THE K-CUTS FOR EACH VERTEX IN THE LAYER
+		 * 
+		 ***************************************************/
+
+		// First of all, every vertex has a cut that is itself, with cost 1/fanout + winner cost of each of its leaves
+		for(std::list<vertex*>::iterator it = next_layer->begin(); it != next_layer->end(); ++it)
+		{
+			list<cut*>* vertex_cuts = new list<cut*>;
+			cut* new_cut = (cut*)malloc(sizeof(cut));
+			new_cut->cost = 1.0 / (float) (*it)->out_edges->size();
+			for(std::list<edge*>::iterator it2 = (*it)->in_edges->begin(); it2 != (*it)->in_edges->end(); ++it2)
+			{
+				void* esrc = (*it2)->src;
+				new_cut->cost += winner_cost((vertex*)esrc);
+			}
+			new_cut->inputs = new list<vertex*>;
+			new_cut->inputs->push_back(*it);
+			vertex_cuts->push_back(new_cut);
+			(*it)->cuts = (void*)vertex_cuts;
+		}
+
+		// The other cuts is the cartesian product of the cuts of the vertex leaves
+		for(std::list<vertex*>::iterator it = next_layer->begin(); it != next_layer->end(); ++it)
+		{
+			if((*it)->in_edges->size() == 2)
+			{
+				edge* e1 = (*it)->in_edges->front();
+				edge* e2 = (*it)->in_edges->back();
+				vertex* src_e1 = (vertex*) e1->src;
+				vertex* src_e2 = (vertex*) e2->src;
+				list<cut*>* cuts_e1 = (list<cut*>*) src_e1->cuts;
+				list<cut*>* cuts_e2 = (list<cut*>*) src_e2->cuts;
+				if(cuts_e1->size() < 1 || cuts_e2->size() < 1)
+				{
+					cerr << "Fail. Each vertex must have at least 1 cut." << (*it)->label << endl;
+					exit(-1);
+				}
+				for(std::list<cut*>::iterator it2 = cuts_e1->begin(); it2 != cuts_e1->end(); ++it2)
+					for(std::list<cut*>::iterator it3 = cuts_e2->begin(); it3 != cuts_e2->end(); ++it3)
+					{
+						cut* e1_cut = (*it2);
+						cut* e2_cut = (*it3);
+
+						cut* new_cut = (cut*)malloc(sizeof(cut));
+						new_cut->cost = e1_cut->cost + e2_cut->cost;
+						new_cut->inputs = new list<vertex*>;
+						for(std::list<vertex*>::iterator it4 = e1_cut->inputs->begin(); it4 != e1_cut->inputs->end(); ++it4)
+							new_cut->inputs->push_back(*it4);
+						for(std::list<vertex*>::iterator it5 = e2_cut->inputs->begin(); it5 != e2_cut->inputs->end(); ++it5)
+							new_cut->inputs->push_back(*it5);
+						list<cut*>* vertex_cuts = (list<cut*>*)(*it)->cuts;
+						// discards cuts with more than max_inputs inputs
+						if(new_cut->inputs->size() <= max_inputs) vertex_cuts->push_back(new_cut);
+
+					}
+			}
+			else
+			{
+				cerr << "Fail. Each vertex must have 2 and only 2 incoming edges." << (*it)->label << endl;
+				exit(-1);
+			}
+		}
+
+		// cut the implementations with high cost
+		for(std::list<vertex*>::iterator it = next_layer->begin(); it != next_layer->end(); ++it)
+		{
+			list<cut*>* vertex_cuts = (list<cut*>*) (*it)->cuts;
+			if(vertex_cuts->size() >= max_cuts)
+			{
+				while(vertex_cuts->size() > 2)
+				{
+					cut* max_cut = *(vertex_cuts->begin());
+					float max_cost = max_cut->cost;
+					for(std::list<cut*>::iterator it2 = vertex_cuts->begin(); it2 != vertex_cuts->end(); ++it2)
+						if((*it2)->cost > max_cost) max_cut = (*it2);
+					vertex_cuts->remove(max_cut);
+				}
+			}
+		}
+
+		if(next_layer->size() > 0)
+		{
+			cout << endl << "Layer n. " << ln << ":" << endl;
+			for(std::list<vertex*>::iterator it = next_layer->begin(); it != next_layer->end(); ++it)	print_cuts(*it);
+		}
 		ln++;
 
 		current_layer = next_layer;
 		for(std::list<vertex*>::iterator it = next_layer->begin(); it != next_layer->end(); ++it)	preceding_vertices->push_back(*it);
 
 	}
-	while(current_layer->size() != 0);
+	while(current_layer->size() > 0);
 
 	return 0;
 }
