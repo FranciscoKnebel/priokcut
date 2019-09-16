@@ -40,7 +40,6 @@ typedef struct v {
 typedef struct c {
 	float cost;
 	list<vertex*>* inputs;
-	int gen;
 } cut;
 
 // these lists describes the AIG
@@ -294,7 +293,7 @@ float winner_cost(vertex* v)
 	}
 	else 
 	{
-		cerr << "Fail. Found a vertex that has no cuts." << endl;
+		cerr << "Fail. Found a vertex that has no cuts: " << v->label << endl;
 		exit(-1);
 	}
 }
@@ -432,26 +431,11 @@ int main(int argc, char* argv[])
 		 * 
 		 ***************************************************/
 
-		// First of all, every vertex has a cut that is itself, with cost 1/fanout + winner cost of each of its leaves
+		// The cuts is the cartesian product of the cuts of the vertex leaves
 		for(std::list<vertex*>::iterator it = next_layer->begin(); it != next_layer->end(); ++it)
 		{
 			list<cut*>* vertex_cuts = new list<cut*>;
-			cut* new_cut = (cut*)malloc(sizeof(cut));
-			new_cut->cost = 1.0 / (float) (*it)->out_edges->size();
-			for(std::list<edge*>::iterator it2 = (*it)->in_edges->begin(); it2 != (*it)->in_edges->end(); ++it2)
-			{
-				void* esrc = (*it2)->src;
-				new_cut->cost += winner_cost((vertex*)esrc);
-			}
-			new_cut->inputs = new list<vertex*>;
-			new_cut->inputs->push_back(*it);
-			vertex_cuts->push_back(new_cut);
 			(*it)->cuts = (void*)vertex_cuts;
-		}
-
-		// The other cuts is the cartesian product of the cuts of the vertex leaves
-		for(std::list<vertex*>::iterator it = next_layer->begin(); it != next_layer->end(); ++it)
-		{
 			if((*it)->in_edges->size() == 2)
 			{
 				edge* e1 = (*it)->in_edges->front();
@@ -475,9 +459,9 @@ int main(int argc, char* argv[])
 						new_cut->cost = e1_cut->cost + e2_cut->cost;
 						new_cut->inputs = new list<vertex*>;
 						for(std::list<vertex*>::iterator it4 = e1_cut->inputs->begin(); it4 != e1_cut->inputs->end(); ++it4)
-							new_cut->inputs->push_back(*it4);
+							new_cut->inputs->push_back(*it4);	
 						for(std::list<vertex*>::iterator it5 = e2_cut->inputs->begin(); it5 != e2_cut->inputs->end(); ++it5)
-							new_cut->inputs->push_back(*it5);
+							if(!vertex_exists(new_cut->inputs, (*it5)->label)) new_cut->inputs->push_back(*it5);
 						list<cut*>* vertex_cuts = (list<cut*>*)(*it)->cuts;
 						// discards cuts with more than max_inputs inputs
 						if(new_cut->inputs->size() <= max_inputs) vertex_cuts->push_back(new_cut);
@@ -491,20 +475,36 @@ int main(int argc, char* argv[])
 			}
 		}
 
+		// Every vertex has a cut that is itself with cost 1/fanout + cost of the winner implementation
+		for(std::list<vertex*>::iterator it = next_layer->begin(); it != next_layer->end(); ++it)
+		{
+			cut* new_cut = (cut*)malloc(sizeof(cut));
+			new_cut->cost = 1.0 / (float) (*it)->out_edges->size() + winner_cost(*it);
+			new_cut->inputs = new list<vertex*>;
+			new_cut->inputs->push_back(*it);
+			list<cut*>* vertex_cuts = (list<cut*>*)(*it)->cuts;
+			vertex_cuts->push_back(new_cut);
+		}
+
+
 		// cut the implementations with high cost
 		for(std::list<vertex*>::iterator it = next_layer->begin(); it != next_layer->end(); ++it)
 		{
 			list<cut*>* vertex_cuts = (list<cut*>*) (*it)->cuts;
 			if(vertex_cuts->size() >= max_cuts)
 			{
+				cut* autocut = NULL;
 				while(vertex_cuts->size() > 2)
 				{
 					cut* max_cut = *(vertex_cuts->begin());
-					float max_cost = max_cut->cost;
+					float max_cost = 0.0;
 					for(std::list<cut*>::iterator it2 = vertex_cuts->begin(); it2 != vertex_cuts->end(); ++it2)
-						if((*it2)->cost > max_cost) max_cut = (*it2);
+						if((*it2)->cost >= max_cost) max_cut = (*it2);
+					if(max_cut->inputs->size() == 1 && max_cut->inputs->front()->label == (*it)->label) // save the autocut
+						autocut = max_cut;
 					vertex_cuts->remove(max_cut);
 				}
+				if(autocut != NULL) vertex_cuts->push_back(autocut);
 			}
 		}
 
