@@ -2,13 +2,13 @@
 //
 // Company: Universidade Federal do Rio Grande do Sul
 // Engineer: Rafael de Oliveira Calçada
-// 
+//
 // Create Date: 19.09.2019 16:12:57
 // Description: Priority K-cut Algorithm Implementation
-// 
+//
 // Revision:
 // Revision 1.0 - Improving memory performance
-// 
+//
 //////////////////////////////////////////////////////////////////////////////////
 
 #include <iostream>
@@ -21,8 +21,24 @@ using namespace std;
 #define MAX_INPUTS 3
 
 /*
- * DATA STRUCTURES 
- ****************************************/
+ * GENERAL INFO
+ ********************************************************************************/
+
+/*	MEMORY USAGE
+
+		8 * A bytes for the edges
+		8 * M bytes for the vertices
+		(4 + 4 * MAX_INPUTS) * MAX_CUTS * M bytes for the cuts	*/
+
+/*	ALGORITHM CAPACITY
+
+		An AIG graph with up to 1.073.741.824 vertices. For such AIG,
+		the algorithm uses 20 MBytes + 4*MAX_CUTS*MAX_INPUTS Mbytes of RAM */
+
+
+/*
+ * DATA STRUCTURES
+ ********************************************************************************/
 
 // structures that forms the AIG graph
 typedef struct e {
@@ -31,25 +47,23 @@ typedef struct e {
 } edge;
 
 typedef struct v {
-	int label;
 	int i1;
 	int i2;
-	int winner_cut;
 } vertex;
 
 // the cuts
 typedef struct c {
 	float cost;
-	int output;
 	int inputs[MAX_INPUTS];
 } cut;
 
-// these lists describes the AIG
-edge* edges;
-vertex* inputs;
+// these 'lists' describes the AIG
 vertex* vertices;
+edge* edges;
+int* outputs;
 
-// these lists are used by the algorithm to evaluate the results
+// these 'lists' are used by the algorithm to evaluate the results
+cut* cuts;
 vector<vertex>* next_layer;
 vector<vertex>* current_layer;
 vector<vertex>* preceding_vertices;
@@ -65,7 +79,7 @@ vector<vertex>* preceding_vertices;
 void create_graph_from_input_file(char* filename)
 {
 
-	// opens the input file	
+	// opens the input file
 	ifstream input_file;
 	input_file.open(filename, ifstream::in);
 
@@ -77,10 +91,11 @@ void create_graph_from_input_file(char* filename)
 
 	// process the 1st line
 	char buffer[256];
+	buffer[0] = '\0';
 	input_file.getline(buffer, sizeof(buffer));
 
 	// file format check
-	if(buffer[0] != 'a' && buffer[1] != 'a' && buffer[2] != 'g')
+	if(strlen(buffer) > 2 && buffer[0] != 'a' && buffer[1] != 'a' && buffer[2] != 'g')
 	{
 		cerr << "Failed to process the input file. Wrong or unknown format." << endl;
 		exit(-1);
@@ -97,7 +112,7 @@ void create_graph_from_input_file(char* filename)
 	token = strtok(NULL, " ");
 	int num_outputs = atoi(token);
 	token = strtok(NULL, " ");
-	int num_ands = atoi(token);	
+	int num_ands = atoi(token);
 
 	// check for latches
 	if(num_latches != 0)
@@ -105,7 +120,7 @@ void create_graph_from_input_file(char* filename)
 		cerr << "This graph contains latches. The current version of this implementation do not support them." << endl;
 		exit(-1);
 	}
-	
+
 	// integrity check #1
 	if(num_variables != num_inputs + num_latches + num_ands)
 	{
@@ -114,41 +129,122 @@ void create_graph_from_input_file(char* filename)
 	}
 
 	// OK. Now we're ready for memory allocation
-	inputs = (vertex*) malloc ( num_inputs * sizeof(vertex) );
+	outputs = (int*) malloc ( num_outputs * sizeof(int) );
 	vertices = (vertex*) malloc ( num_variables * sizeof(vertex) );
 	edges = (edge*) malloc ( num_ands * sizeof(edge) );
+	cuts = (cut*) malloc ( num_variables * sizeof(cut) * MAX_CUTS );
 
-	// Creates the input vertices and their outcoming edges
+	// initialization of output list
+	for(int i = 0; i < num_outputs; i++) outputs[i] = -1;
+
+	// creates the input vertices
 	for(int i = 0; i < num_inputs; i++)
 	{
-		vertex* v = inputs + i*sizeof(vertex);
 		input_file.getline(buffer, sizeof(buffer));
+		if(strlen(buffer) < 1)
+		{
+			cerr << "The input file reached the end before expected." << endl;
+			exit(-1);
+		}
 		token = strtok(buffer, " ");
-		v->label = atoi(token);
+		int label = atoi(token);
+		// integrity check #2
+		if(label < 0)
+		{
+			cerr << "The graph contains an invalid (negative) input index: " << label << "." << endl;
+			exit(-1);
+		}
+		// integrity check #4
+		if(label != ((i+1)*2))
+		{
+			cerr << "The AIG format states that the label of an input must be twice its index, but the input with index " << i+1 << " has the label " << label << "." << endl;
+			exit(-1);
+		}
+		// if reached here, everything is OK, so sets the value of the incoming edges as -1 (indicating that has no incoming edges)
+		vertex* v = vertices + i*sizeof(vertex);
 		v->i1 = -1;
 		v->i2 = -1;
-		v->winner_cut = -1;
 	}
-	for(int i = 0; i < num_inputs; i++)
+
+	// creates the output vertices
+	for(int i = 0; i < num_outputs; i++)
 	{
-		vertex* v = inputs + i*sizeof(vertex);
-		cout << i << ": label = " << v->label << ", i1 = " << v->i1 << ", i2 = " << v->i2 << ", winner_cut = " << v->winner_cut << endl;
+		input_file.getline(buffer, sizeof(buffer));
+		if(strlen(buffer) < 1)
+		{
+			cerr << "The input file reached the end before expected." << endl;
+			exit(-1);
+		}
+		token = strtok(buffer, " ");
+		int label = atoi(token);
+		// integrity check #5
+		if(label < 0)
+		{
+			cerr << "The graph contains an invalid (negative) output index: " << label << "." << endl;
+			exit(-1);
+		}
+		// integrity check #6
+		for(int j = 0; j < num_outputs; j++)
+			if(outputs[j] == label)
+			{
+				cerr << "The graph contains an output declared twice: " << label << "." << endl;
+				exit(-1);
+			}
+		// if reached here, everything is OK, so adds the label in the outputs list
+		outputs[i] = label;
 	}
 
-
+	// creates the vertices
+	for(int i = num_inputs; i < num_variables; i++)
+	{
+		input_file.getline(buffer, sizeof(buffer));
+		if(strlen(buffer) < 1)
+		{
+			cerr << "The input file reached the end before expected." << endl;
+			exit(-1);
+		}
+		token = strtok(buffer, " ");
+		int label = atoi(token);
+		// integrity check #7
+		if(label < 0)
+		{
+			cerr << "The graph contains an invalid (negative) vertex index: " << label << "." << endl;
+			exit(-1);
+		}
+		// integrity check #8
+		if(label != ((i+1)*2))
+		{
+			cerr << "The AIG format states that the label of a vertex must be twice its index, but the vertex with index " << i+1 << " has the label " << label << "." << endl;
+			exit(-1);
+		}
+		token = strtok(NULL, " ");
+		int i1 = atoi(token);
+		token = strtok(NULL, " ");
+		int i2 = atoi(token);
+		// integrity check #9
+		if(i1 < i2)
+		{
+			cerr << "The AIG format states that the label of the first input of a vertex must be greater than the second." << endl;
+			cerr << "Found i1=" << i1 << " and i2=" << i2 << " for the label " << label << "." << endl;
+			exit(-1);			
+		}
+		vertex* v = vertices + i*sizeof(vertex);
+		v->i1 = i1;
+		v->i2 = i2;
+	}
 }
 
 
 /*
- * MAIN FUNCTION: COMPUTES THE PRIORITY K-CUT
- *********************************************/
+ * MAIN FUNCTION: COMPUTES THE PRIORITY K-CUTS FOR THE AIG
+ ********************************************************************************/
 
 int main(int argc, char* argv[])
 {
 	// check for correct usage
 	if(argc != 2)
 	{
-		cerr << "Usage: " << argv[0] << " [input-file]" << endl << "[input-file] = a text file that describes an AIG." << endl;
+		cerr << "Usage: " << argv[0] << " [input-file]" << endl << "[input-file] = an ASCII file that describes an AIG." << endl;
 		return -1;
 	}
 
@@ -156,4 +252,5 @@ int main(int argc, char* argv[])
 	create_graph_from_input_file(argv[1]);
 
 	return 0;
+
 }
