@@ -24,16 +24,27 @@ using namespace std;
  * GENERAL INFO
  ********************************************************************************/
 
-/*	MEMORY USAGE
+/*	MEMORY USAGE vs. AIG SIZE AND ALGORITHM PARAMETERS
 
 		8 * A bytes for the edges
-		8 * M bytes for the vertices
+		12 * M bytes for the vertices
 		(4 + 4 * MAX_INPUTS) * MAX_CUTS * M bytes for the cuts	*/
 
-/*	ALGORITHM CAPACITY
+/*	ALGORITHM THEORETICAL CAPACITY
 
-		An AIG graph with up to 1.073.741.824 vertices. For such AIG,
-		the algorithm uses 20 MBytes + 4*MAX_CUTS*MAX_INPUTS Mbytes of RAM */
+		An AIG graph of up to 1.073.741.824 vertices. For such AIG,
+		the algorithm uses 24 GBytes + 4*MAX_CUTS*MAX_INPUTS Gbytes of RAM */
+
+/*	MEMORY USAGE IN TYPICAL APPLICATIONS AND USAGE OF CACHE MEMORY
+
+		Practical applications of this algorithm can operate on graphs
+		of up to one million vertices. For these graphs, memory usage is
+		approximately 24 to 240 MB, depending on the values
+		of MAX_CUTS and MAX_INPUTS.
+	
+		For small AIG graphs (up to 1000 vertices), graph data is expected
+		to fit entirely into the L1 cache of modern processors,
+		leading to extremely fast executions. */
 
 
 /*
@@ -41,37 +52,39 @@ using namespace std;
  ********************************************************************************/
 
 // structures that forms the AIG graph
-typedef struct e {
-	int src;
-	int dst;
-} edge;
+typedef float edge;
 
 typedef struct v {
 	int i1;
 	int i2;
+	int fanout;
 } vertex;
 
-// the cuts
-typedef struct c {
-	float cost;
-	int inputs[MAX_INPUTS];
-} cut;
-
-// these 'lists' describes the AIG
+// 'lists' that describes the AIG
 vertex* vertices;
 edge* edges;
 int* outputs;
 
-// these 'lists' are used by the algorithm to evaluate the results
-cut* cuts;
-vector<vertex>* next_layer;
-vector<vertex>* current_layer;
-vector<vertex>* preceding_vertices;
+// global variables that describes the AIG
+int num_variables = 0;
+int num_inputs = 0;
+int num_latches = 0;
+int num_outputs = 0;
+int num_ands = 0;
 
+// other globals
+int cut_offset = 0;
+
+// 'lists' used by the algorithm to evaluate the results
+float* cut_costs;
+int* cut_inputs;
+vector<int>* next_layer;
+vector<int>* current_layer;
+vector<int>* preceding_vertices;
 
 /*
  * HELPFUL FUNCTIONS AND PROCEDURES
- ***********************************/
+ ********************************************************************************/
 
 
 // this procedure creates the graph used by the main function
@@ -97,22 +110,22 @@ void create_graph_from_input_file(char* filename)
 	// file format check
 	if(strlen(buffer) > 2 && buffer[0] != 'a' && buffer[1] != 'a' && buffer[2] != 'g')
 	{
-		cerr << "Failed to process the input file. Wrong or unknown format." << endl;
+		cerr << "Failed to process the input file. Wrong, invalid or unknown format." << endl;
 		exit(-1);
 	}
 
 	// split into tokens, saving the values in variables
 	char* token = strtok(buffer," ");
 	token = strtok(NULL, " ");
-	int num_variables = atoi(token);
+	num_variables = atoi(token);
 	token = strtok(NULL, " ");
-	int num_inputs = atoi(token);
+	num_inputs = atoi(token);
 	token = strtok(NULL, " ");
-	int num_latches = atoi(token);
+	num_latches = atoi(token);
 	token = strtok(NULL, " ");
-	int num_outputs = atoi(token);
+	num_outputs = atoi(token);
 	token = strtok(NULL, " ");
-	int num_ands = atoi(token);
+	num_ands = atoi(token);
 
 	// check for latches
 	if(num_latches != 0)
@@ -129,12 +142,11 @@ void create_graph_from_input_file(char* filename)
 	}
 
 	// OK. Now we're ready for memory allocation
-	outputs = (int*) malloc ( num_outputs * sizeof(int) );
-	vertices = (vertex*) malloc ( num_variables * sizeof(vertex) );
-	edges = (edge*) malloc ( num_ands * sizeof(edge) );
-	cuts = (cut*) malloc ( num_variables * sizeof(cut) * MAX_CUTS );
+	outputs = new int[num_outputs];
+	vertices = new vertex[num_variables];
+	edges = new edge[(num_ands << 1)];
 
-	// initialization of output list
+	// initialization of input and output list
 	for(int i = 0; i < num_outputs; i++) outputs[i] = -1;
 
 	// creates the input vertices
@@ -148,25 +160,29 @@ void create_graph_from_input_file(char* filename)
 		}
 		token = strtok(buffer, " ");
 		int label = atoi(token);
+
 		// integrity check #2
 		if(label < 0)
 		{
 			cerr << "The graph contains an invalid (negative) input index: " << label << "." << endl;
 			exit(-1);
 		}
+
 		// integrity check #4
 		if(label != ((i+1)*2))
 		{
 			cerr << "The AIG format states that the label of an input must be twice its index, but the input with index " << i+1 << " has the label " << label << "." << endl;
 			exit(-1);
 		}
-		// if reached here, everything is OK, so sets the value of the incoming edges as -1 (indicating that has no incoming edges)
-		vertex* v = vertices + i*sizeof(vertex);
-		v->i1 = -1;
-		v->i2 = -1;
+
+		// if reached here, everything is OK, so set the value of the incoming edges
+		// to -1 (indicating no incoming edges) and fanout to zero
+		vertices[i].i1 = -1;
+		vertices[i].i2 = -1;
+		vertices[i].fanout = 0;
 	}
 
-	// creates the output vertices
+	// save the label of the output vertices
 	for(int i = 0; i < num_outputs; i++)
 	{
 		input_file.getline(buffer, sizeof(buffer));
@@ -177,12 +193,14 @@ void create_graph_from_input_file(char* filename)
 		}
 		token = strtok(buffer, " ");
 		int label = atoi(token);
+
 		// integrity check #5
 		if(label < 0)
 		{
 			cerr << "The graph contains an invalid (negative) output index: " << label << "." << endl;
 			exit(-1);
 		}
+
 		// integrity check #6
 		for(int j = 0; j < num_outputs; j++)
 			if(outputs[j] == label)
@@ -190,12 +208,13 @@ void create_graph_from_input_file(char* filename)
 				cerr << "The graph contains an output declared twice: " << label << "." << endl;
 				exit(-1);
 			}
+
 		// if reached here, everything is OK, so adds the label in the outputs list
 		outputs[i] = label;
 	}
 
-	// creates the vertices
-	for(int i = num_inputs; i < num_variables; i++)
+	// creates the vertices and its edges
+	for(int i = 0; i < num_ands; i++)
 	{
 		input_file.getline(buffer, sizeof(buffer));
 		if(strlen(buffer) < 1)
@@ -205,14 +224,16 @@ void create_graph_from_input_file(char* filename)
 		}
 		token = strtok(buffer, " ");
 		int label = atoi(token);
+
 		// integrity check #7
 		if(label < 0)
 		{
 			cerr << "The graph contains an invalid (negative) vertex index: " << label << "." << endl;
 			exit(-1);
 		}
+
 		// integrity check #8
-		if(label != ((i+1)*2))
+		if(label != ((i+num_inputs+1)*2))
 		{
 			cerr << "The AIG format states that the label of a vertex must be twice its index, but the vertex with index " << i+1 << " has the label " << label << "." << endl;
 			exit(-1);
@@ -221,6 +242,7 @@ void create_graph_from_input_file(char* filename)
 		int i1 = atoi(token);
 		token = strtok(NULL, " ");
 		int i2 = atoi(token);
+
 		// integrity check #9
 		if(i1 < i2)
 		{
@@ -228,12 +250,90 @@ void create_graph_from_input_file(char* filename)
 			cerr << "Found i1=" << i1 << " and i2=" << i2 << " for the label " << label << "." << endl;
 			exit(-1);			
 		}
-		vertex* v = vertices + i*sizeof(vertex);
-		v->i1 = i1;
-		v->i2 = i2;
+
+		// integrity check #10
+		if(i1 < 2 || i2 < 2)
+		{
+			cerr << "The vertex has an invalid value for its inputs." << endl;
+			cerr << "Found i1=" << i1 << " and i2=" << i2 << " for the label " << label << "." << endl;
+			exit(-1);			
+		}
+
+		// integrity check #11
+		if(label <= i1 || label <= i2)
+		{
+			cerr << "The AIG format states that the label must be greater than the value of its inputs." << endl;
+			cerr << "Found i1=" << i1 << " and i2=" << i2 << " for the label " << label << "." << endl;
+			exit(-1);			
+		}
+
+		// if reached here, everything is OK, so adds the vertex into in the list, creates its edges, and updates the fanout of the child vertices
+		vertices[i+num_inputs].i1 = i1;
+		vertices[i+num_inputs].i2 = i2;
+		vertices[i+num_inputs].fanout = 0;
+		edges[i<<1] = i1 / 2 - 1;
+		edges[(i<<1)+1] = i2 / 2 - 1;
+		int iv1 = i1 >> 1;
+		int iv2 = i2 >> 1;
+		vertices[iv1-1].fanout += 1;
+		vertices[iv2-1].fanout += 1;
 	}
+	
+	// updates the fanout of the output vertices
+	for(int i = 0; i < num_outputs; i++)
+	{
+		int output_index = outputs[i] >> 1;
+		vertices[output_index-1].fanout += 1;
+	}
+
+	// integrity check #12
+	for(int i = 0; i < num_variables; i++)
+	{
+		if(vertices[i].fanout <= 0)
+		{
+			cerr << "There is a vertex (" << (i+1)*2 << ") in the graph that has no outcoming edge (fanout = 0)." << endl;
+			exit(-1);
+		}
+	}
+
 }
 
+// get an iterator to some element in a vector
+vector<int>::iterator get_iterator(vector<int>* vec, int elem)
+{
+	for(vector<int>::iterator it = vec->begin(); it != vec->end(); ++it)
+	{
+		if((*it) == elem)
+		{
+			return it;
+		}
+	}
+	return vec->end();
+}
+
+// check if a vertex is in the list
+bool in_the_list(int vertex_index, vector<int>* list)
+{
+	for(int i = 0; i < list->size(); i++)
+		if(list->at(i) == vertex_index) 
+			return true;
+	return false;
+}
+
+// prints the cuts of a vertex on screen
+void print_cuts(int vertex_index)
+{
+	int vertex_label = (vertex_index+1) << 1;
+	cout << "  v(" << vertex_label << ") has cuts:" << endl;
+	for(int i = 0; i < MAX_CUTS; i++)
+	{
+		cout << "    { ";
+		for(int j = 0; j < MAX_INPUTS; j++)
+			if(cut_inputs[vertex_index*cut_offset+i*MAX_INPUTS+j] != -1)
+				cout << cut_inputs[vertex_index*cut_offset+i*MAX_INPUTS+j] << " ";
+		cout << "} with cost " << cut_costs[vertex_index*MAX_CUTS+i] << endl;
+	}
+}
 
 /*
  * MAIN FUNCTION: COMPUTES THE PRIORITY K-CUTS FOR THE AIG
@@ -248,8 +348,136 @@ int main(int argc, char* argv[])
 		return -1;
 	}
 
-	// create the AIG graph
+	// creates the AIG graph
 	create_graph_from_input_file(argv[1]);
+
+	/*
+	 * ABOUT THE ALGORITHM
+	 *
+	 * A "layer" of vertices is a set of vertices witch edges only comes from preceding layers.
+	 * The first layer is the set of inputs. The second layer has edges that comes from one of the input vertices.
+	 * The third layer has edges that comes from the first or second layer, and so on...
+	 * The algorithm evaluates the set of vertices of a layer based on 'current_layer'.
+	 * The algorithm begins making the input set the 'current_layer'.
+	 * Then, it evaluates the set of vertices of the next layer based on current_layer (and calls this set 'next_layer').
+	 * Then, it evaluates the priority k-cuts. Then and sets current_layer = next_layer.
+	 * The algorithm stops when, after evaluating next_layer, the result is an empty set.
+	 *
+	 */
+
+	// first of all, allocate memory for the cuts
+	cut_offset = MAX_CUTS*MAX_INPUTS;
+	cut_costs = new float[num_variables*MAX_CUTS];
+	cut_inputs = new int[num_variables*cut_offset];
+
+	// set the cost of the input vertices cuts to zero
+	for(int i = 0; i < num_inputs; i++)
+		for(int j = 0; j < MAX_CUTS; j++)
+		{
+			cut_costs[(i*MAX_CUTS) + j] = 0;
+			cut_inputs[i*cut_offset+j*MAX_INPUTS] = (i+1) << 1;
+			for(int k = 1; k < MAX_INPUTS; k++)	cut_inputs[i*cut_offset+j*MAX_INPUTS+k] = -1;
+		}
+
+	// make current_layer the input set and add the inputs in the preceding_vertices list
+	current_layer = new vector<int>;
+	preceding_vertices = new vector<int>;
+	for(int i = 0; i < num_inputs; i++) 
+	{
+		current_layer->push_back(i);
+		preceding_vertices->push_back(i);
+	} 
+
+	int layer_number = 1;
+
+	cout << "Input set (layer n. " << layer_number << "):" << endl;
+	for(int i = 0; i < num_inputs; i++) print_cuts(i);
+	layer_number++;
+
+	int next_layer_size = 0;
+	do
+	{
+		// First, initialize next_layer as an empty set
+		next_layer = new vector<int>;
+
+		// Evaluates the number of edges that leaves the current_layer set.
+		// The search in the edges list will stop when 'num_edges' were found,
+		// what turns the execution a lot faster
+		int num_edges = 0;
+		for(int i = 0; i < current_layer->size(); i++) num_edges += vertices[current_layer->at(i)].fanout;
+
+		// Then, add in the next_layer all the vertices pointed by the edges
+		// that leaves a vertex from the current_layer.
+		int num_edges_found = 0;
+		int start_index = (preceding_vertices->size() - num_inputs) << 1;
+		for(int i = start_index; i < (num_ands << 1); i+=2)
+		{
+			for(int j = 0; j < current_layer->size(); j++)
+			{
+				int vertex_src_index = current_layer->at(j);
+				int vertex_dst_index = (i / 2) + num_inputs;
+				if(edges[i] == vertex_src_index)
+				{
+					num_edges_found += 1;
+					if(!in_the_list(vertex_dst_index,next_layer))
+						next_layer->push_back(vertex_dst_index);
+				}
+				if(edges[i+1] == vertex_src_index)
+				{
+					num_edges_found += 1;
+					if(!in_the_list(vertex_dst_index,next_layer))
+						next_layer->push_back(vertex_dst_index);
+				}
+			}
+			if(num_edges == num_edges_found) break;
+		}
+
+		/*
+		 * At this point, next_layer has all the vertices pointed by the edges that leaves the vertices in the current_layer set,
+		 * BUT, note that these vertices can be pointed also by any other vertices, including vertices that are not in the
+		 * current_layer set or any preceding layer.
+		 *
+		 * To fix this, there is a list with only the vertices that are in the current_layer or in a preceding layer,
+		 * called 'preceding_vertices'
+		 *
+		 * SO, we need to check the edges that comes in to a vertex currently in the next_layer set. If the source of an edge
+		 * is not a vertex of preceding_vertices, we need to remove the vertex pointed by this edge from next_layer
+		 *
+		 */
+
+		// finds the vertices that must not be in the next_list and put them in the remove_list
+		vector<int>* remove_list = new vector<int>;
+		for(int i = 0; i < next_layer->size(); i++)
+		{
+			int edges_index = (next_layer->at(i)+1) * 2;
+			int edge1_src = edges[(next_layer->at(i)-num_inputs)*2];
+			int edge2_src = edges[(next_layer->at(i)-num_inputs)*2+1];
+			if(!in_the_list(edge1_src,preceding_vertices))
+				remove_list->push_back(next_layer->at(i));
+			if(!in_the_list(edge2_src,preceding_vertices))
+				remove_list->push_back(next_layer->at(i));
+		}
+
+		// then remove
+		for(int i = 0; i < remove_list->size(); i++)
+		{
+			vector<int>::iterator it = get_iterator(next_layer, remove_list->at(i));
+			if(it == next_layer->end())
+			{
+				cerr << "Fail to remove a vertex from the next_layer set. This should not occur." << endl;
+				exit(-1);
+			}
+			else next_layer->erase(it);
+		}
+
+		/*
+ 		 * EVALUATE THE PRIORITY K-CUTS
+		 ************************************************************************/
+
+		next_layer_size = next_layer->size();
+
+	} while (false);
+	
 
 	return 0;
 

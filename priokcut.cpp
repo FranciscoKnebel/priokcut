@@ -340,7 +340,7 @@ int main(int argc, char* argv[])
 	/*
 	 * ABOUT THE ALGORITHM
 	 *
-	 * A "layer" of vertices is a set of vertices witch edges that comes from the preceding layers.
+	 * A "layer" of vertices is a set of vertices witch edges only comes from preceding layers.
 	 * The first layer is the set of inputs. The second layer follows immeadiately the layer of inputs (the both edges that comes in its vertices comes from an input vertex).
 	 * The third layer has edges that comes from the vertices of the first or second layer, and so on...
 	 * The algorithm evaluates the set of vertices of a layer based on the current_layer.
