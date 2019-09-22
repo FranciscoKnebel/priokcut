@@ -12,13 +12,12 @@
 //////////////////////////////////////////////////////////////////////////////////
 
 #include <iostream>
+#include <iomanip>
 #include <fstream>
+#include <time.h>
 #include <string.h>
 #include <vector>
 using namespace std;
-
-#define MAX_CUTS 2
-#define MAX_INPUTS 3
 
 /*
  * GENERAL INFO
@@ -28,19 +27,19 @@ using namespace std;
 
 		8 * A bytes for the edges
 		12 * M bytes for the vertices
-		(4 + 4 * MAX_INPUTS) * MAX_CUTS * M bytes for the cuts	*/
+		(4 + 4 * max_inputs) * max_cuts * M bytes for the cuts	*/
 
 /*	ALGORITHM THEORETICAL CAPACITY
 
 		An AIG graph of up to 1.073.741.824 vertices. For such AIG,
-		the algorithm uses 24 GBytes + 4*MAX_CUTS*MAX_INPUTS Gbytes of RAM */
+		the algorithm uses 24 GBytes + 4*max_cuts*max_inputs Gbytes of RAM */
 
 /*	MEMORY USAGE IN TYPICAL APPLICATIONS AND USAGE OF CACHE MEMORY
 
 		Practical applications of this algorithm can operate on graphs
 		of up to one million vertices. For these graphs, memory usage is
 		approximately 24 to 240 MB, depending on the values
-		of MAX_CUTS and MAX_INPUTS.
+		of max_cuts and max_inputs.
 	
 		For small AIG graphs (up to 1000 vertices), graph data is expected
 		to fit entirely into the L1 cache of modern processors,
@@ -52,7 +51,7 @@ using namespace std;
  ********************************************************************************/
 
 // structures that forms the AIG graph
-typedef float edge;
+typedef int edge;
 
 typedef struct v {
 	int i1;
@@ -74,6 +73,9 @@ int num_ands = 0;
 
 // other globals
 int cut_offset = 0;
+int max_cuts = 0;
+int max_inputs = 0;
+
 
 // 'lists' used by the algorithm to evaluate the results
 float* cut_costs;
@@ -81,6 +83,7 @@ int* cut_inputs;
 vector<int>* next_layer;
 vector<int>* current_layer;
 vector<int>* preceding_vertices;
+
 
 /*
  * HELPFUL FUNCTIONS AND PROCEDURES
@@ -146,7 +149,7 @@ void create_graph_from_input_file(char* filename)
 	vertices = new vertex[num_variables];
 	edges = new edge[(num_ands << 1)];
 
-	// initialization of input and output list
+	// initialization of output list
 	for(int i = 0; i < num_outputs; i++) outputs[i] = -1;
 
 	// creates the input vertices
@@ -311,6 +314,64 @@ vector<int>::iterator get_iterator(vector<int>* vec, int elem)
 	return vec->end();
 }
 
+// checks if a product of cuts matches with a cut in the list
+bool match_with_a_cut_in_the_list(vector<int>* product, int vertex_index)
+{
+	bool match = false;
+	for(int i = 0; i < max_cuts; i++)
+	{
+		int num_inputs_found = 0;
+		for(int j = 0; j < product->size(); j++)
+		{
+			bool input_found = false;
+			for(int k = 0; k < max_inputs; k++)
+			{
+				if(cut_inputs[vertex_index*cut_offset+i*max_inputs+k] == product->at(j))
+				{
+					input_found = true;
+				}
+			}
+			if(input_found) num_inputs_found += 1;
+		}
+		if(num_inputs_found == product->size()) return true;
+	}
+	return false;
+}
+
+// return the index of the winner cut
+int winner_cut(int vertex_index)
+{
+	int winner_cost = cut_costs[vertex_index*max_cuts];
+	int winner_index = 0;
+	for(int j = 0; j < max_cuts; j++)
+	{
+		if(cut_costs[vertex_index*max_cuts + j] < 0) continue;
+		if(winner_cost >= cut_costs[vertex_index*max_cuts + j] ||
+		cut_costs[vertex_index*max_cuts + j] > 0 && winner_cost < 0)
+		{
+			winner_cost = cut_costs[vertex_index*max_cuts + j];
+			winner_index = j;
+		}
+	}
+	return winner_index;
+}
+
+// return the index of the loser cut
+int loser_cut(int vertex_index)
+{
+	int loser_cost = 0;
+	int loser_index = 0;
+	for(int j = 0; j < max_cuts; j++)
+	{
+		if(loser_cost <= cut_costs[vertex_index*max_cuts + j])
+		{
+			loser_cost = cut_costs[vertex_index*max_cuts + j];
+			loser_index = j;
+		}
+	}
+	return loser_index;
+}
+
 // check if a vertex is in the list
 bool in_the_list(int vertex_index, vector<int>* list)
 {
@@ -325,27 +386,57 @@ void print_cuts(int vertex_index)
 {
 	int vertex_label = (vertex_index+1) << 1;
 	cout << "  v(" << vertex_label << ") has cuts:" << endl;
-	for(int i = 0; i < MAX_CUTS; i++)
+	for(int i = 0; i < max_cuts; i++)
 	{
-		cout << "    { ";
-		for(int j = 0; j < MAX_INPUTS; j++)
-			if(cut_inputs[vertex_index*cut_offset+i*MAX_INPUTS+j] != -1)
-				cout << cut_inputs[vertex_index*cut_offset+i*MAX_INPUTS+j] << " ";
-		cout << "} with cost " << cut_costs[vertex_index*MAX_CUTS+i] << endl;
+		if(cut_costs[vertex_index*max_cuts+i] != -1) {
+			cout << "    { ";
+			for(int j = 0; j < max_inputs; j++)
+				if(cut_inputs[vertex_index*cut_offset+i*max_inputs+j] != -1)
+					cout << cut_inputs[vertex_index*cut_offset+i*max_inputs+j] << " ";
+			cout << "} with cost " << cut_costs[vertex_index*max_cuts+i] << endl;
+		}
 	}
 }
+
 
 /*
  * MAIN FUNCTION: COMPUTES THE PRIORITY K-CUTS FOR THE AIG
  ********************************************************************************/
 
+
 int main(int argc, char* argv[])
 {
+
+	max_cuts = 2;
+	max_inputs = 3;
+
+	double time_spent = 0.0;
+	clock_t start = clock();
+
 	// check for correct usage
-	if(argc != 2)
+	if(argc != 2 && argc != 4)
 	{
-		cerr << "Usage: " << argv[0] << " [input-file]" << endl << "[input-file] = an ASCII file that describes an AIG." << endl;
+		cerr << endl << "  Usages: " << endl << endl;
+		cerr << "  " << argv[0] << " [input-file]" << endl;
+		cerr << "  " << argv[0] << " [input-file] [max-cuts] [max-inputs]" << endl << endl;
+		cerr << "  [input-file] = an AIG file in the ASCII format." << endl;
+		cerr << "  [max-cuts] = the maximum number of cuts stored for each vertex in the AIG." << endl;
+		cerr << "  [max-inputs] = the maximum number of inputs for a cut." << endl << endl;
+		cerr << "  If not provided, the value of [max-cuts] and [max-inputs] "
+			 << "is set to 2 and 3, respectively." << endl << endl;
 		return -1;
+	}
+
+	if(argc == 4)
+	{
+		max_cuts = atoi(argv[2]);
+		max_inputs = atoi(argv[3]);
+	}
+
+	if(max_cuts < 2 || max_inputs < 2)
+	{
+		cerr << "Minimal value for [max-cuts] and [max-inputs] is 2." << endl;
+		exit(-1);
 	}
 
 	// creates the AIG graph
@@ -354,7 +445,7 @@ int main(int argc, char* argv[])
 	/*
 	 * ABOUT THE ALGORITHM
 	 *
-	 * A "layer" of vertices is a set of vertices witch edges only comes from preceding layers.
+	 * A "layer" of vertices is a set of vertices witch edges comes only from preceding layers.
 	 * The first layer is the set of inputs. The second layer has edges that comes from one of the input vertices.
 	 * The third layer has edges that comes from the first or second layer, and so on...
 	 * The algorithm evaluates the set of vertices of a layer based on 'current_layer'.
@@ -366,18 +457,23 @@ int main(int argc, char* argv[])
 	 */
 
 	// first of all, allocate memory for the cuts
-	cut_offset = MAX_CUTS*MAX_INPUTS;
-	cut_costs = new float[num_variables*MAX_CUTS];
+	cut_offset = max_cuts*max_inputs;
+	cut_costs = new float[num_variables*max_cuts];
 	cut_inputs = new int[num_variables*cut_offset];
 
-	// set the cost of the input vertices cuts to zero
+	// set to zero the cost of the input vertex cut
+	// the other spaces in the vector are initialized with -1
 	for(int i = 0; i < num_inputs; i++)
-		for(int j = 0; j < MAX_CUTS; j++)
+	{
+		cut_costs[(i*max_cuts)] = 0;
+		cut_inputs[i*cut_offset] = (i+1) << 1;
+		for(int k = 1; k < max_inputs; k++)	cut_inputs[i*cut_offset+k] = -1;
+		for(int j = 1; j < max_cuts; j++)
 		{
-			cut_costs[(i*MAX_CUTS) + j] = 0;
-			cut_inputs[i*cut_offset+j*MAX_INPUTS] = (i+1) << 1;
-			for(int k = 1; k < MAX_INPUTS; k++)	cut_inputs[i*cut_offset+j*MAX_INPUTS+k] = -1;
+			cut_costs[(i*max_cuts) + j] = -1;
+			for(int k = 0; k < max_inputs; k++)	cut_inputs[i*cut_offset+j*max_inputs+k] = -1;
 		}
+	}
 
 	// make current_layer the input set and add the inputs in the preceding_vertices list
 	current_layer = new vector<int>;
@@ -395,22 +491,23 @@ int main(int argc, char* argv[])
 	layer_number++;
 
 	int next_layer_size = 0;
+	vector<int>* previous_layer = NULL;
 	do
 	{
-		// First, initialize next_layer as an empty set
+		// First, initialize next_layer as an empty set and deallocates the previous later if it exists
 		next_layer = new vector<int>;
+		if(previous_layer != NULL) delete previous_layer;
 
 		// Evaluates the number of edges that leaves the current_layer set.
 		// The search in the edges list will stop when 'num_edges' were found,
-		// what turns the execution a lot faster
+		// witch turns the execution a lot faster
 		int num_edges = 0;
 		for(int i = 0; i < current_layer->size(); i++) num_edges += vertices[current_layer->at(i)].fanout;
 
 		// Then, add in the next_layer all the vertices pointed by the edges
 		// that leaves a vertex from the current_layer.
 		int num_edges_found = 0;
-		int start_index = (preceding_vertices->size() - num_inputs) << 1;
-		for(int i = start_index; i < (num_ands << 1); i+=2)
+		for(int i = 0; i < (num_ands << 1); i+=2)
 		{
 			for(int j = 0; j < current_layer->size(); j++)
 			{
@@ -474,10 +571,141 @@ int main(int argc, char* argv[])
  		 * EVALUATE THE PRIORITY K-CUTS
 		 ************************************************************************/
 
+		// Makes the cartesian product of the cuts of the vertex leaves
+		for(int i = 0; i < next_layer->size(); i++)
+		{	
+			
+			// initialize the cuts of the vertex
+			int vertex_index = next_layer->at(i);
+			for(int j = 0; j < max_cuts; j++)
+			{
+				cut_costs[vertex_index*max_cuts + j] = -1.0;
+				for(int k = 0; k < max_inputs; k++)
+					cut_inputs[vertex_index*cut_offset+j*max_inputs+k] = -1;
+			}
+			
+			// cartesian product
+			int leaf1_vertex_index = edges[(vertex_index-num_inputs)*2];
+			int leaf2_vertex_index = edges[(vertex_index-num_inputs)*2+1];
+			vector<int> product;
+			vector<int> cut1_inputs;
+			vector<int> cut2_inputs;
+			float product_cost;
+			float cut1_cost;
+			float cut2_cost;
+
+			for(int j = 0; j < max_cuts; j++)
+				for(int k = 0; k < max_cuts; k++)
+				{
+
+					// erases previous content
+					product.clear();
+					cut1_inputs.clear();
+					cut2_inputs.clear();
+
+					// get the cost of the cuts
+					cut1_cost = cut_costs[leaf1_vertex_index*max_cuts + j];
+					cut2_cost = cut_costs[leaf2_vertex_index*max_cuts + k];
+					product_cost = cut1_cost + cut2_cost;
+
+					// if the cuts cost is not negative, make the product
+					if(cut1_cost < 0 || cut2_cost < 0) continue;
+					else 
+					{
+						// get the inputs of the cuts
+						for(int l = 0; l < max_inputs; l++)
+							cut1_inputs.push_back(cut_inputs[leaf1_vertex_index*cut_offset+j*max_inputs+l]);
+						for(int l = 0; l < max_inputs; l++)
+							cut2_inputs.push_back(cut_inputs[leaf2_vertex_index*cut_offset+k*max_inputs+l]);
+						for(int l = 0; l < cut1_inputs.size(); l++)
+							if(cut1_inputs.at(l) != -1)
+								product.push_back(cut1_inputs.at(l));
+						for(int l = 0; l < cut2_inputs.size(); l++)
+							if(cut2_inputs.at(l) != -1)
+								if(!in_the_list(cut2_inputs.at(l), &product))
+									product.push_back(cut2_inputs.at(l));
+						
+						// verifies the cost of the cuts
+						// if the product has a lower cost, replaces the cut
+						// if the product has more than max_input inputs, do nothing
+						// only inserts the cut if it does not match any cut already in the list
+						if(product.size() <= max_inputs && !match_with_a_cut_in_the_list(&product,vertex_index))
+						{
+							bool inserted = false;
+							for(int l = 0; l < max_cuts; l++)
+							{
+								if(!inserted) {
+									int actual_cost = cut_costs[vertex_index*max_cuts + l];
+									if(actual_cost == -1 || actual_cost > product_cost)
+									{
+										cut_costs[vertex_index*max_cuts + l] = product_cost;
+										for(int m = 0; m < max_inputs; m++)
+											cut_inputs[vertex_index*cut_offset+l*max_inputs+m] = -1;
+										for(int m = 0; m < product.size(); m++)
+											cut_inputs[vertex_index*cut_offset+l*max_inputs+m] = product.at(m);
+										inserted = true;
+									}
+								}
+							} 
+						}
+					}					
+				}
+
+			// computes the winner cut and evaluates the cost of the autocut
+			int winner = winner_cut(vertex_index);
+			float winner_cost = cut_costs[vertex_index*max_cuts + winner];
+			float autocut_cost = winner_cost + (1.0 / (float) vertices[vertex_index].fanout);
+
+			// inserts the autocut in a free position (if there is), OR
+			// replaces a cut "worse" than the autocut (a cut with higher cost)
+			bool replaced_or_inserted = false;
+			for(int l = 0; l < max_cuts; l++)
+				if(!replaced_or_inserted) {
+					int actual_cost = cut_costs[vertex_index*max_cuts + l];
+					if(actual_cost == -1 || actual_cost > autocut_cost)
+					{
+							cut_costs[vertex_index*max_cuts + l] = autocut_cost;
+							for(int m = 0; m < max_inputs; m++)
+								cut_inputs[vertex_index*cut_offset+l*max_inputs+m] = -1;
+							cut_inputs[vertex_index*cut_offset+l*max_inputs] = (vertex_index+1)*2;
+							replaced_or_inserted = true;
+					}
+				}
+
+			// if there's no free position and no cut is worse than the autocut,
+			// chooses the cut with the highest cost ("loser" cut) and replaces it
+			if(!replaced_or_inserted)
+			{				
+				int loser_cut_index = loser_cut(vertex_index);
+				cut_costs[vertex_index*max_cuts + loser_cut_index] = autocut_cost;
+				for(int m = 0; m < max_inputs; m++)
+					cut_inputs[vertex_index*cut_offset+loser_cut_index*max_inputs+m] = -1;
+				cut_inputs[vertex_index*cut_offset+loser_cut_index*max_inputs] = (vertex_index+1)*2;
+			}
+		}
+
+		// prints the results on screen
+		if(next_layer->size() > 0)
+		{
+			cout << endl << "Layer n. " << layer_number << ":" << endl;
+			for(int i = 0; i < next_layer->size(); i++) print_cuts(next_layer->at(i));
+		}
+		layer_number++;
+
+		// prepare the lists for the next iteration
+		previous_layer = current_layer;
+		current_layer = next_layer;
+		for(int i = 0; i < next_layer->size(); i++) preceding_vertices->push_back(next_layer->at(i));
 		next_layer_size = next_layer->size();
 
-	} while (false);
-	
+	} while (next_layer_size > 0);
+
+	// evaluates the execution time
+	clock_t end = clock();
+	time_spent += ((double)(end - start) / CLOCKS_PER_SEC) * 1000.0;
+	cout.setf(std::ios::fixed);
+	cout.precision(5);
+	cout << endl << "Execution time: " << time_spent << " us" << endl << endl;
 
 	return 0;
 
