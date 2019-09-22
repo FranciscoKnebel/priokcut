@@ -1,6 +1,6 @@
 # Priority K-cut Algorithm Implementation
 
-Given an AIG graph file in the Aiger ASCII format, the program evaluates the priority K-cuts for all the vertices. You can set
+Given an AIG graph file in the AIGER ASCII format, the program evaluates the priority K-cuts for all the vertices. You can set
 the maximum number of cuts (`k`) for each vertex and the number of inputs (`i`) for each cut.
 
 The algorithm manages the memory in a very efficient manner.
@@ -10,7 +10,7 @@ The algorithm manages the memory in a very efficient manner.
 ```
 g++ priokcuts.cpp -o priokcuts
 ```
-2. Call the program, passing the AIG file (in the Aiger ASCII format) as an argument:
+2. Call the program, passing the AIG file (in the AIGER ASCII format) as an argument:
 ```
 ./priokcuts aiger/example.aag
 ```
