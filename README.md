@@ -31,7 +31,11 @@ For an AIG graph with `M` vertices and `E` edges, the program will use:
 
 An AIG graph of up to 1.073.741.824 vertices.
 
-###	Performance notes
+### Complexity
+
+Not calculated yet, but expected to be quadratic according to the number of vertices.
+
+### Performance notes
 
 Practical applications of this algorithm can operate on graphs
 of up to one million vertices. For these graphs, memory usage is
