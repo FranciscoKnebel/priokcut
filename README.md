@@ -42,7 +42,7 @@ Not calculated yet, but expected to be quadratic according to the number of vert
 Practical applications of this algorithm can operate on graphs
 of up to one million vertices. For these graphs, memory usage is
 approximately 24 to 240 MB, depending on the values
-of max_cuts and max_inputs.
+of `i` and `k`.
 	
 For small AIG graphs (up to 1000 vertices), graph data is expected
 to fit entirely into the L1 cache of modern processors,
