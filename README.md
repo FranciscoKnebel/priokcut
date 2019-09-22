@@ -29,8 +29,7 @@ For an AIG graph with `M` vertices and `E` edges, the program will use:
 
 ### Theoretical capacity
 
-An AIG graph of up to 1.073.741.824 vertices. For such AIG,	the algorithm uses
-`24 + 4*k*i` of RAM
+An AIG graph of up to 1.073.741.824 vertices.
 
 ###	Performance notes
 
