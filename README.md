@@ -47,3 +47,7 @@ of max_cuts and max_inputs.
 For small AIG graphs (up to 1000 vertices), graph data is expected
 to fit entirely into the L1 cache of modern processors,
 leading to extremely fast executions.
+
+### Licence
+
+You can use the software for scientific or academic purposes only. Commercial use is not allowed.
