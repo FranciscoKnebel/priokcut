@@ -702,10 +702,12 @@ int main(int argc, char* argv[])
 
 	// evaluates the execution time
 	clock_t end = clock();
-	time_spent += ((double)(end - start) / CLOCKS_PER_SEC) * 1000.0;
+	time_spent += ((double)(end - start) / CLOCKS_PER_SEC);
 	cout.setf(std::ios::fixed);
-	cout.precision(5);
-	cout << endl << "Execution time: " << time_spent << " us" << endl << endl;
+	cout.precision(2);
+	cout << endl << "Execution time (sec): " << time_spent << endl;
+	cout << "Execution time (ms):  " << time_spent * 1000.0 << endl;
+	cout << "Execution time (us):  " << time_spent * 1000000.0 << endl << endl;
 
 	return 0;
 
