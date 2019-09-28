@@ -23,16 +23,17 @@ using namespace std;
  * GENERAL INFO
  ********************************************************************************/
 
-/*	MEMORY USAGE vs. AIG SIZE AND ALGORITHM PARAMETERS
+/*	MEMORY USAGE vs. AIG SIZE
 
 		8 * A bytes for the edges
-		12 * M bytes for the vertices
-		(4 + 4 * max_inputs) * max_cuts * M bytes for the cuts	*/
+		16 * M bytes for the vertices
+		(4 + 4 * max_inputs) * max_cuts * M bytes for the cuts
+		4 * M bytes for auxiliary data */
 
 /*	ALGORITHM THEORETICAL CAPACITY
 
 		An AIG graph of up to 1.073.741.824 vertices. For such AIG,
-		the algorithm uses 24 GBytes + 4*max_cuts*max_inputs Gbytes of RAM */
+		the algorithm uses 24 GBytes + 4*max_cuts*max_inputs GBytes of RAM */
 
 /*	MEMORY USAGE IN TYPICAL APPLICATIONS AND USAGE OF CACHE MEMORY
 
@@ -57,6 +58,7 @@ typedef struct v {
 	int i1;
 	int i2;
 	int fanout;
+	int layer;
 } vertex;
 
 // 'lists' that describes the AIG
@@ -80,6 +82,7 @@ int max_inputs = 0;
 // 'lists' used by the algorithm to evaluate the results
 float* cut_costs;
 int* cut_inputs;
+vector<vector<int>*>* layers;
 vector<int>* next_layer;
 vector<int>* current_layer;
 vector<int>* preceding_vertices;
@@ -179,10 +182,11 @@ void create_graph_from_input_file(char* filename)
 		}
 
 		// if reached here, everything is OK, so set the value of the incoming edges
-		// to -1 (indicating no incoming edges) and fanout to zero
+		// to -1 (indicating no incoming edges), fanout to 0 and layer number to 1
 		vertices[i].i1 = -1;
 		vertices[i].i2 = -1;
 		vertices[i].fanout = 0;
+		vertices[i].layer = 1;
 	}
 
 	// save the label of the output vertices
@@ -280,6 +284,27 @@ void create_graph_from_input_file(char* filename)
 		int iv2 = i2 >> 1;
 		vertices[iv1-1].fanout += 1;
 		vertices[iv2-1].fanout += 1;
+		
+		// evaluate and saves the vertex layer number
+		int layer_i1 = vertices[iv1-1].layer;
+		int layer_i2 = vertices[iv2-1].layer;
+		int max_layer = layer_i1 > layer_i2 ? layer_i1 : layer_i2;
+		vertices[i+num_inputs].layer = max_layer + 1;
+		/*
+		// if the list of vertices of the layer number N do not exists, creates and add the vertex into it
+		// if exists, just add the vertex into it
+		if(layers->size() < max_layer)
+		{
+			vector<int>* layer = new vector<int>;
+			layers->push_back(layer);
+			layer->push_back(i+num_inputs);
+		}
+		else
+		{
+			vector<int>* layer = layers->at(max_layer);
+			layer->push_back(i+num_inputs);
+		}*/
+
 	}
 	
 	// updates the fanout of the output vertices
@@ -297,6 +322,11 @@ void create_graph_from_input_file(char* filename)
 			cerr << "There is a vertex (" << (i+1)*2 << ") in the graph that has no outcoming edge (fanout = 0)." << endl;
 			exit(-1);
 		}
+	}
+
+	for(int i = 0; i < num_variables; i++)
+	{
+		cout << i << " - layer " << vertices[i].layer << endl;
 	}
 
 }
@@ -438,6 +468,9 @@ int main(int argc, char* argv[])
 		cerr << "Minimal value for [max-cuts] and [max-inputs] is 2." << endl;
 		exit(-1);
 	}
+
+	// creates the layers list
+	layers = new vector<vector<int>*>;
 
 	// creates the AIG graph
 	create_graph_from_input_file(argv[1]);
