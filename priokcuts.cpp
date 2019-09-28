@@ -23,26 +23,30 @@ using namespace std;
  * GENERAL INFO
  ********************************************************************************/
 
-/*	MEMORY USAGE vs. AIG SIZE
+/*	MEMORY USAGE vs. AIG SIZE and other parameters
+	
+		Let M be the number of vertices, E the number of edges, I the maximum number
+		of inputs allowed in the cuts and K the maximum number of cuts for each
+		vertex. So, the algorithm will use:
 
-		8 * A bytes for the edges
-		16 * M bytes for the vertices
-		(4 + 4 * max_inputs) * max_cuts * M bytes for the cuts
+		4 * E bytes to store the edges
+		16 * M bytes to store the vertices
+		(4 + 4 * I) * K * M bytes for the cuts
 		4 * M bytes for auxiliary data */
 
 /*	ALGORITHM THEORETICAL CAPACITY
 
 		An AIG graph of up to 1.073.741.824 vertices. For such AIG,
-		the algorithm uses 24 GBytes + 4*max_cuts*max_inputs GBytes of RAM */
+		the algorithm uses 24 GB + 4 * K * I GB of RAM */
 
 /*	MEMORY USAGE IN TYPICAL APPLICATIONS AND USAGE OF CACHE MEMORY
 
 		Practical applications of this algorithm can operate on graphs
 		of up to one million vertices. For these graphs, memory usage is
-		approximately 24 to 240 MB, depending on the values
-		of max_cuts and max_inputs.
+		approximately 50 to 100 MB, depending on the values
+		of K and I.
 	
-		For small AIG graphs (up to 1000 vertices), graph data is expected
+		For small AIG graphs (up to 10000 vertices), graph data is expected
 		to fit entirely into the L1 cache of modern processors,
 		leading to extremely fast executions. */
 
@@ -77,6 +81,8 @@ int num_ands = 0;
 int cut_offset = 0;
 int max_cuts = 0;
 int max_inputs = 0;
+bool display = false;
+char* filename = NULL;
 
 
 // 'lists' used by the algorithm to evaluate the results
@@ -84,8 +90,6 @@ float* cut_costs;
 int* cut_inputs;
 vector<vector<int>*>* layers;
 vector<int>* next_layer;
-vector<int>* current_layer;
-vector<int>* preceding_vertices;
 
 
 /*
@@ -95,7 +99,8 @@ vector<int>* preceding_vertices;
 
 // this procedure creates the graph used by the main function
 // opens, read and process the input file, allocating memory efficiently
-void create_graph_from_input_file(char* filename)
+// split the graph in layers of vertices
+void create_graph_and_split_in_layers(char* filename)
 {
 
 	// opens the input file
@@ -303,7 +308,7 @@ void create_graph_from_input_file(char* filename)
 		{
 			vector<int>* layer = layers->at(max_layer-1);
 			layer->push_back(i+num_inputs);
-		}
+		}		
 
 	}
 	
@@ -423,6 +428,104 @@ void print_cuts(int vertex_index)
 	}
 }
 
+// show the help on screen
+void show_help(char* argv[])
+{
+		cerr << endl << "  \e[1mUsage:\e[0m " << argv[0] << " <file> [options]" << endl << endl;
+		cerr << "  <file>         An AIG in the ASCII format. This argument is required." << endl << endl;
+		cerr << "  \e[1mOptions\e[0m:" << endl << endl;
+		cerr << "  -i <value>     The maximum number of inputs for each cut." << endl;
+		cerr << "  -k <value>     The number of cuts stored for each vertex." << endl;
+		cerr << "  -d             Display the results on the screen (may slow down the execution time for large graphs)." << endl << endl;
+		cerr << "  -h --help      This help." << endl << endl;
+		cerr << "  If not provided, the values of i and k are set to 2 and 3, respectively." << endl << endl;
+}
+
+// process the arguments passed by command line interface
+void process_args(int argc, char* argv[])
+{
+
+	int i = 1;	
+	while(i < argc)
+	{
+		char* arg = argv[i];
+		if(arg[0] == '-')
+		{
+			if(strlen(arg) < 2)
+			{
+				cerr << "FAIL. Unknown option." << endl;
+				exit(-1);					
+			}
+			if(arg[1] == 'd')
+			{
+				display = true;
+				i++;
+			}
+			if(arg[1] == 'h')
+			{
+				show_help(argv);
+				exit(-1);
+			}
+			if(arg[1] == '-')
+			{
+				if(strlen(arg) < 6)
+				{
+					cerr << "FAIL. Unknown option." << endl;
+					exit(-1);					
+				}
+				if(arg[2] == 'h' && arg[3] == 'e' && arg[4] == 'l' && arg[5] == 'p')
+				{
+					show_help(argv);
+					exit(-1);
+				}
+				else
+				{
+					cerr << "FAIL. Unknown option." << endl;
+					exit(-1);					
+				}
+			}
+			else if(arg[1] == 'i' || arg[1] == 'k')
+			{
+				if(i+1 < argc)
+				{
+					char* nextarg = argv[i+1];
+					if(nextarg[0] == '-')
+					{
+						cerr << "FAIL. Missing or wrong value for -" << arg[1] << " option." << endl;
+						exit(-1);						
+					}
+					if(arg[1] == 'i') max_inputs = atoi(nextarg);
+					if(arg[1] == 'k') max_cuts = atoi(nextarg);
+					i += 2;
+				}
+				else
+				{
+					cerr << "FAIL. Missing or wrong value for -" << arg[1] << " option." << endl;
+					exit(-1);
+				}
+			}
+		}
+		else
+		{
+			filename = argv[i];
+			i++;
+		}
+	}
+
+	if(filename == NULL)
+	{
+		cerr << "FAIL. <file> parameter not provided." << endl;
+		exit(-1);
+	}
+
+	if(max_cuts < 2 || max_inputs < 2)
+	{
+		cerr << "FAIL. Minimal value for -i and -k is 2." << endl;
+		exit(-1);
+	}
+
+}
+
 
 /*
  * MAIN FUNCTION: COMPUTES THE PRIORITY K-CUTS FOR THE AIG
@@ -432,43 +535,30 @@ void print_cuts(int vertex_index)
 int main(int argc, char* argv[])
 {
 
+	// set the parameters default values
 	max_cuts = 2;
 	max_inputs = 3;
+	display = false;
 
+	// initializes the runtime count
 	double time_spent = 0.0;
 	clock_t start = clock();
 
 	// check for correct usage
-	if(argc != 2 && argc != 4)
+	if(argc < 2)
 	{
-		cerr << endl << "  Usages: " << endl << endl;
-		cerr << "  " << argv[0] << " [input-file]" << endl;
-		cerr << "  " << argv[0] << " [input-file] [max-cuts] [max-inputs]" << endl << endl;
-		cerr << "  [input-file] = an AIG file in the ASCII format." << endl;
-		cerr << "  [max-cuts] = the maximum number of cuts stored for each vertex in the AIG." << endl;
-		cerr << "  [max-inputs] = the maximum number of inputs for a cut." << endl << endl;
-		cerr << "  If not provided, the value of [max-cuts] and [max-inputs] "
-			 << "is set to 2 and 3, respectively." << endl << endl;
-		return -1;
-	}
-
-	if(argc == 4)
-	{
-		max_cuts = atoi(argv[2]);
-		max_inputs = atoi(argv[3]);
-	}
-
-	if(max_cuts < 2 || max_inputs < 2)
-	{
-		cerr << "Minimal value for [max-cuts] and [max-inputs] is 2." << endl;
+		show_help(argv);
 		exit(-1);
 	}
+
+	// arguments processing
+	process_args(argc, argv);
 
 	// creates the layers list
 	layers = new vector<vector<int>*>;
 
 	// creates the AIG graph
-	create_graph_from_input_file(argv[1]);
+	create_graph_and_split_in_layers(argv[1]);
 
 	/*
 	 * ABOUT THE ALGORITHM
@@ -476,11 +566,9 @@ int main(int argc, char* argv[])
 	 * A "layer" of vertices is a set of vertices witch edges comes only from preceding layers.
 	 * The first layer is the set of inputs. The second layer has edges that comes from one of the input vertices.
 	 * The third layer has edges that comes from the first or second layer, and so on...
-	 * The algorithm evaluates the set of vertices of a layer based on 'current_layer'.
-	 * The algorithm begins making the input set the 'current_layer'.
-	 * Then, it evaluates the set of vertices of the next layer based on current_layer (and calls this set 'next_layer').
-	 * Then, it evaluates the priority k-cuts. Then and sets current_layer = next_layer.
-	 * The algorithm stops when, after evaluating next_layer, the result is an empty set.
+	 * The algorithm evaluates the set of vertices of a layer during the processing of the input file.
+	 * The algorithm begins seting the cost of the input vertex cuts to 0.
+	 * Then, it evaluates the cuts and the costs of each vertex in each layer (the bottom layers are processed first).
 	 *
 	 */
 
@@ -489,8 +577,8 @@ int main(int argc, char* argv[])
 	cut_costs = new float[num_variables*max_cuts];
 	cut_inputs = new int[num_variables*cut_offset];
 
-	// set to zero the cost of the input vertex cut
-	// the other spaces in the vector are initialized with -1
+	// set to zero the cost of the cut of each input vertex
+	// fill the blank spaces left in the vector with -1
 	for(int i = 0; i < num_inputs; i++)
 	{
 		cut_costs[(i*max_cuts)] = 0;
@@ -503,97 +591,19 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	// make current_layer the input set and add the inputs in the preceding_vertices list
-	current_layer = new vector<int>;
-	preceding_vertices = new vector<int>;
-	for(int i = 0; i < num_inputs; i++) 
-	{
-		current_layer->push_back(i);
-		preceding_vertices->push_back(i);
-	} 
-
 	int layer_number = 1;
 
-	cout << "Input set (layer n. " << layer_number << "):" << endl;
-	for(int i = 0; i < num_inputs; i++) print_cuts(i);
+	if(display)
+	{
+		cout << "Input set (layer n. " << layer_number << "):" << endl;
+		for(int i = 0; i < num_inputs; i++) print_cuts(i);
+	}
 	layer_number++;
 
-	int next_layer_size = 0;
-	vector<int>* previous_layer = NULL;
-	do
+	for(int z = 0; z < layers->size(); z++)
 	{
-		// First, initialize next_layer as an empty set and deallocates the previous later if it exists
-		next_layer = new vector<int>;
-		if(previous_layer != NULL) delete previous_layer;
 
-		// Evaluates the number of edges that leaves the current_layer set.
-		// The search in the edges list will stop when 'num_edges' were found,
-		// witch turns the execution a lot faster
-		int num_edges = 0;
-		for(int i = 0; i < current_layer->size(); i++) num_edges += vertices[current_layer->at(i)].fanout;
-
-		// Then, add in the next_layer all the vertices pointed by the edges
-		// that leaves a vertex from the current_layer.
-		int num_edges_found = 0;
-		for(int i = 0; i < (num_ands << 1); i+=2)
-		{
-			for(int j = 0; j < current_layer->size(); j++)
-			{
-				int vertex_src_index = current_layer->at(j);
-				int vertex_dst_index = (i / 2) + num_inputs;
-				if(edges[i] == vertex_src_index)
-				{
-					num_edges_found += 1;
-					if(!in_the_list(vertex_dst_index,next_layer))
-						next_layer->push_back(vertex_dst_index);
-				}
-				if(edges[i+1] == vertex_src_index)
-				{
-					num_edges_found += 1;
-					if(!in_the_list(vertex_dst_index,next_layer))
-						next_layer->push_back(vertex_dst_index);
-				}
-			}
-			if(num_edges == num_edges_found) break;
-		}
-
-		/*
-		 * At this point, next_layer has all the vertices pointed by the edges that leaves the vertices in the current_layer set,
-		 * BUT, note that these vertices can be pointed also by any other vertices, including vertices that are not in the
-		 * current_layer set or any preceding layer.
-		 *
-		 * To fix this, there is a list with only the vertices that are in the current_layer or in a preceding layer,
-		 * called 'preceding_vertices'
-		 *
-		 * SO, we need to check the edges that comes in to a vertex currently in the next_layer set. If the source of an edge
-		 * is not a vertex of preceding_vertices, we need to remove the vertex pointed by this edge from next_layer
-		 *
-		 */
-
-		// finds the vertices that must not be in the next_list and put them in the remove_list
-		vector<int>* remove_list = new vector<int>;
-		for(int i = 0; i < next_layer->size(); i++)
-		{
-			int edges_index = (next_layer->at(i)+1) * 2;
-			int edge1_src = edges[(next_layer->at(i)-num_inputs)*2];
-			int edge2_src = edges[(next_layer->at(i)-num_inputs)*2+1];
-			if(!in_the_list(edge1_src,preceding_vertices))
-				remove_list->push_back(next_layer->at(i));
-			if(!in_the_list(edge2_src,preceding_vertices))
-				remove_list->push_back(next_layer->at(i));
-		}
-
-		// then remove
-		for(int i = 0; i < remove_list->size(); i++)
-		{
-			vector<int>::iterator it = get_iterator(next_layer, remove_list->at(i));
-			if(it == next_layer->end())
-			{
-				cerr << "Fail to remove a vertex from the next_layer set. This should not occur." << endl;
-				exit(-1);
-			}
-			else next_layer->erase(it);
-		}
+		next_layer = layers->at(z);
 
 		/*
  		 * EVALUATE THE PRIORITY K-CUTS
@@ -713,40 +723,28 @@ int main(int argc, char* argv[])
 		}
 
 		// prints the results on screen
-		if(next_layer->size() > 0)
+		if(display)
 		{
 			cout << endl << "Layer n. " << layer_number << ":" << endl;
 			for(int i = 0; i < next_layer->size(); i++) print_cuts(next_layer->at(i));
 		}
 		layer_number++;
 
-		// prepare the lists for the next iteration
-		previous_layer = current_layer;
-		current_layer = next_layer;
-		for(int i = 0; i < next_layer->size(); i++) preceding_vertices->push_back(next_layer->at(i));
-		next_layer_size = next_layer->size();
-
-	} while (next_layer_size > 0);
+	}
 
 	// evaluates the execution time
 	clock_t end = clock();
 	time_spent += ((double)(end - start) / CLOCKS_PER_SEC);
 	cout.setf(std::ios::fixed);
-	cout.precision(2);
-	cout << endl << "Execution time (sec): " << time_spent << endl;
-	cout << "Execution time (ms):  " << time_spent * 1000.0 << endl;
-	cout << "Execution time (us):  " << time_spent * 1000000.0 << endl << endl;
-
-	/*for(int i = 0; i < layers->size(); i++)
-	{
-		vector<int>* layer = layers->at(i);
-		cout << "Vertices no layer " << i+2 << endl;
-		for(int j = 0; j < layer->size(); j++)
-		{
-			cout << layer->at(j) << " ";
-		}
-		cout << endl;
-	}*/
+	string time_sec = to_string(time_spent);
+	string time_msec = to_string((time_spent*1000.0));
+	string time_usec = to_string((time_spent*1000000.0));
+	time_sec.erase(time_sec.find_last_not_of('0'), string::npos);
+	time_msec.erase(time_msec.find_last_not_of('0'), string::npos);
+	time_usec.erase(time_usec.find_last_not_of('0'), string::npos);
+	cout << endl << "Execution time (sec): " << time_sec << " s" << endl;
+	cout << "Execution time (ms):  " << time_msec << " ms" << endl;
+	cout << "Execution time (us):  " << time_usec << " us" << endl << endl;
 
 	return 0;
 
