@@ -33,11 +33,12 @@ The program do not support AIG graphs with latches yet.
 
 ###	Memory usage
 
-For an AIG graph with `M` vertices and `E` edges, the program will use:
+Running the program to compute the `k` cuts with `i` inputs of an AIG graph with `M` vertices, `E` edges and `I` inputs uses:
 
-* `4*E` bytes to store the edges in the main memory
-* `12*M` bytes for the vertices
+* `4*E` bytes to store the edges
+* `16*M` bytes to store the vertices
 * `(4+4*i)*k*M` bytes for the cuts
+* `4*M` bytes for auxiliary data
 
 ### Theoretical capacity
 
@@ -45,14 +46,14 @@ An AIG graph of up to 1.073.741.824 vertices.
 
 ### Complexity
 
-Not calculated yet, but expected to be quadratic according to the number of vertices.
+Linear, directly proportional to the number of vertices.
 
 ### Performance notes
 
 Practical applications of this algorithm can operate on graphs
 of up to one million vertices. For these graphs, memory usage is
-approximately 24 to 240 MB, depending on the values
-of `i` and `k`. In general, the lower the values of i and k, the lower the memory usage.
+approximately 50 to 100 MB, depending on the values
+of `i` and `k`. In general, the lower the values of `i` and `k`, the lower the memory usage and execution time.
 	
 For small AIG graphs (up to 1000 vertices), graph data is expected
 to fit entirely into the L1 cache of modern processors,
