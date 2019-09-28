@@ -290,7 +290,7 @@ void create_graph_from_input_file(char* filename)
 		int layer_i2 = vertices[iv2-1].layer;
 		int max_layer = layer_i1 > layer_i2 ? layer_i1 : layer_i2;
 		vertices[i+num_inputs].layer = max_layer + 1;
-		/*
+		
 		// if the list of vertices of the layer number N do not exists, creates and add the vertex into it
 		// if exists, just add the vertex into it
 		if(layers->size() < max_layer)
@@ -301,9 +301,9 @@ void create_graph_from_input_file(char* filename)
 		}
 		else
 		{
-			vector<int>* layer = layers->at(max_layer);
+			vector<int>* layer = layers->at(max_layer-1);
 			layer->push_back(i+num_inputs);
-		}*/
+		}
 
 	}
 	
@@ -322,11 +322,6 @@ void create_graph_from_input_file(char* filename)
 			cerr << "There is a vertex (" << (i+1)*2 << ") in the graph that has no outcoming edge (fanout = 0)." << endl;
 			exit(-1);
 		}
-	}
-
-	for(int i = 0; i < num_variables; i++)
-	{
-		cout << i << " - layer " << vertices[i].layer << endl;
 	}
 
 }
@@ -741,6 +736,17 @@ int main(int argc, char* argv[])
 	cout << endl << "Execution time (sec): " << time_spent << endl;
 	cout << "Execution time (ms):  " << time_spent * 1000.0 << endl;
 	cout << "Execution time (us):  " << time_spent * 1000000.0 << endl << endl;
+
+	/*for(int i = 0; i < layers->size(); i++)
+	{
+		vector<int>* layer = layers->at(i);
+		cout << "Vertices no layer " << i+2 << endl;
+		for(int j = 0; j < layer->size(); j++)
+		{
+			cout << layer->at(j) << " ";
+		}
+		cout << endl;
+	}*/
 
 	return 0;
 
