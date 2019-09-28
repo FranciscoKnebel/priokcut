@@ -14,10 +14,20 @@ g++ priokcuts.cpp -o priokcuts
 ```
 ./priokcuts aiger/example.aag
 ```
-The default value for `k` is 2, and the default value for `i` is 3, but you can set these values:
+There are some basic options. You can:
+* Set the number of k-cuts with the -k argument. Example:
 ```
-./priokcuts [input-file] [max-cuts] [max-inputs]
+./priokcuts aiger/example.aag -k 5
 ```
+* Set the maximum number of inputs for each cut with the -i argument. Example:
+```
+./priokcuts aiger/example.aag -i 5
+```
+* Display the results on screen (this slow down the execution time for large graphs):
+```
+./priokcuts aiger/example.aag -d
+```
+
 ### Limitations
 The program do not support AIG graphs with latches yet.
 
