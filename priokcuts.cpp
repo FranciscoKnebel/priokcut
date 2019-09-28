@@ -86,7 +86,7 @@ char* filename = NULL;
 
 
 // 'lists' used by the algorithm to evaluate the results
-float* cut_costs;
+double* cut_costs;
 int* cut_inputs;
 vector<vector<int>*>* layers;
 vector<int>* next_layer;
@@ -574,7 +574,7 @@ int main(int argc, char* argv[])
 
 	// first of all, allocate memory for the cuts
 	cut_offset = max_cuts*max_inputs;
-	cut_costs = new float[num_variables*max_cuts];
+	cut_costs = new double[num_variables*max_cuts];
 	cut_inputs = new int[num_variables*cut_offset];
 
 	// set to zero the cost of the cut of each input vertex
@@ -644,7 +644,7 @@ int main(int argc, char* argv[])
 					// get the cost of the cuts
 					cut1_cost = cut_costs[leaf1_vertex_index*max_cuts + j];
 					cut2_cost = cut_costs[leaf2_vertex_index*max_cuts + k];
-					product_cost = cut1_cost + cut2_cost;
+					product_cost = (cut1_cost + cut2_cost) / (float) vertices[vertex_index].fanout;
 
 					// if the cuts cost is not negative, make the product
 					if(cut1_cost < 0 || cut2_cost < 0) continue;
