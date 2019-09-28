@@ -15,15 +15,15 @@ g++ priokcuts.cpp -o priokcuts
 ./priokcuts aiger/example.aag
 ```
 There are some basic options. You can:
-* Set the number of k-cuts with the -k argument. Example:
+* Set the number of k-cuts
 ```
 ./priokcuts aiger/example.aag -k 5
 ```
-* Set the maximum number of inputs for each cut with the -i argument. Example:
+* Set the maximum number of inputs for each cut
 ```
 ./priokcuts aiger/example.aag -i 5
 ```
-* Display the results on screen (this slow down the execution time for large graphs):
+* Display the results on screen (this slow down the execution time for large graphs)
 ```
 ./priokcuts aiger/example.aag -d
 ```
