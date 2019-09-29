@@ -96,48 +96,32 @@ vector<int>* next_layer;
  * HELPFUL FUNCTIONS AND PROCEDURES
  ********************************************************************************/
 
-
-// this procedure creates the graph used by the main function
-// opens, read and process the input file, allocating memory efficiently
-// split the graph in layers of vertices
-void create_graph_and_split_in_layers(char* filename)
+// get a char from a file in the AIGER binary format
+unsigned char getnoneofch(ifstream& input_file)
 {
+	int ch = input_file.get();
+	if(ch != EOF) return ch;
+	cerr << "*** decode: unexpected EOF" << endl;
+	exit(-1);
+}
 
-	// opens the input file
-	ifstream input_file;
-	input_file.open(filename, ifstream::in);
-
-	if(!input_file.is_open())
+// decodes a delta encoding from a file in the AIGER binary format
+unsigned int decode(ifstream& input_file)
+{
+	unsigned x = 0, i = 0;
+	unsigned char ch;
+	while ((ch = getnoneofch(input_file)) & 0x80)
 	{
-		cerr << "Failed to open the input file." << endl;
-		exit(-1);
+		x |= (ch & 0x7f) << (7 * i++);
 	}
+	return x | (ch << (7 * i));
+}
 
-	// process the 1st line
+// process the file in the ASCII format
+void process_ascii_format(ifstream& input_file)
+{
+	char* token;
 	char buffer[256];
-	buffer[0] = '\0';
-	input_file.getline(buffer, sizeof(buffer));
-
-	// file format check
-	if(strlen(buffer) > 2 && buffer[0] != 'a' && buffer[1] != 'a' && buffer[2] != 'g')
-	{
-		cerr << "Failed to process the input file. Wrong, invalid or unknown format." << endl;
-		exit(-1);
-	}
-
-	// split into tokens, saving the values in variables
-	char* token = strtok(buffer," ");
-	token = strtok(NULL, " ");
-	num_variables = atoi(token);
-	token = strtok(NULL, " ");
-	num_inputs = atoi(token);
-	token = strtok(NULL, " ");
-	num_latches = atoi(token);
-	token = strtok(NULL, " ");
-	num_outputs = atoi(token);
-	token = strtok(NULL, " ");
-	num_ands = atoi(token);
-
 	// check for latches
 	if(num_latches != 0)
 	{
@@ -319,14 +303,217 @@ void create_graph_and_split_in_layers(char* filename)
 		vertices[output_index-1].fanout += 1;
 	}
 
-	// integrity check #12
-	for(int i = 0; i < num_variables; i++)
+}
+
+// process the file in the binary format
+void process_binary_format(ifstream& input_file)
+{
+	char* token;
+	char buffer[256];
+
+	// check for latches
+	if(num_latches != 0)
 	{
-		if(vertices[i].fanout <= 0)
+		cerr << "This graph contains latches. The current version of this implementation do not support them." << endl;
+		exit(-1);
+	}
+
+	// integrity check #1
+	if(num_variables != num_inputs + num_latches + num_ands)
+	{
+		cerr << "This graph is invalid. M != I + L + A." << endl;
+		exit(-1);
+	}
+
+	// OK. Now we're ready for memory allocation
+	outputs = new int[num_outputs];
+	vertices = new vertex[num_variables];
+	edges = new edge[(num_ands << 1)];
+
+	// initialization of output list
+	for(int i = 0; i < num_outputs; i++) outputs[i] = -1;
+
+	// creates the input vertices
+	for(int i = 0; i < num_inputs; i++)
+	{
+		vertices[i].i1 = -1;
+		vertices[i].i2 = -1;
+		vertices[i].fanout = 0;
+		vertices[i].layer = 1;
+	}
+
+	// save the label of the output vertices
+	for(int i = 0; i < num_outputs; i++)
+	{
+		input_file.getline(buffer, sizeof(buffer));
+		if(strlen(buffer) < 1)
 		{
-			cerr << "There is a vertex (" << (i+1)*2 << ") in the graph that has no outcoming edge (fanout = 0)." << endl;
+			cerr << "The input file reached the end before expected." << endl;
 			exit(-1);
 		}
+		token = strtok(buffer, " ");
+		int label = atoi(token);
+
+		// integrity check #5
+		if(label < 0)
+		{
+			cerr << "The graph contains an invalid (negative) output index: " << label << "." << endl;
+			exit(-1);
+		}
+
+		// integrity check #6
+		for(int j = 0; j < num_outputs; j++)
+			if(outputs[j] == label)
+			{
+				cerr << "The graph contains an output declared twice: " << label << "." << endl;
+				exit(-1);
+			}
+
+		// if reached here, everything is OK, so adds the label in the outputs list
+		outputs[i] = label;
+	}
+
+	// creates the vertices and its edges
+	for(int i = 0; i < num_ands; i++)
+	{
+		
+		unsigned int delta0 = decode(input_file);
+		unsigned int delta1 = decode(input_file);
+
+		int label = (num_inputs+i+1)*2;
+		int i1 = label - delta0;
+		int i2 = i1 - delta1;
+
+		// integrity check #7
+		if(label < 0)
+		{
+			cerr << "The graph contains an invalid (negative) vertex index: " << label << "." << endl;
+			exit(-1);
+		}
+
+		// integrity check #8
+		if(label != ((i+num_inputs+1)*2))
+		{
+			cerr << "The AIG format states that the label of a vertex must be twice its index, but the vertex with index " << i+1 << " has the label " << label << "." << endl;
+			exit(-1);
+		}
+
+		// integrity check #9
+		if(i1 < i2)
+		{
+			cerr << "The AIG format states that the label of the first input of a vertex must be greater than the second." << endl;
+			cerr << "Found i1=" << i1 << " and i2=" << i2 << " for the label " << label << "." << endl;
+			exit(-1);			
+		}
+
+		// integrity check #10
+		if(i1 < 2 || i2 < 2)
+		{
+			cerr << "The vertex has an invalid value for its inputs." << endl;
+			cerr << "Found i1=" << i1 << " and i2=" << i2 << " for the label " << label << "." << endl;
+			exit(-1);			
+		}
+
+		// integrity check #11
+		if(label <= i1 || label <= i2)
+		{
+			cerr << "The AIG format states that the label must be greater than the value of its inputs." << endl;
+			cerr << "Found i1=" << i1 << " and i2=" << i2 << " for the label " << label << "." << endl;
+			exit(-1);			
+		}
+
+		// if reached here, everything is OK, so adds the vertex into in the list, creates its edges, and updates the fanout of the child vertices
+		vertices[i+num_inputs].i1 = i1;
+		vertices[i+num_inputs].i2 = i2;
+		vertices[i+num_inputs].fanout = 0;
+		edges[i<<1] = i1 / 2 - 1;
+		edges[(i<<1)+1] = i2 / 2 - 1;
+		int iv1 = i1 >> 1;
+		int iv2 = i2 >> 1;
+		vertices[iv1-1].fanout += 1;
+		vertices[iv2-1].fanout += 1;
+		
+		// evaluate and saves the vertex layer number
+		int layer_i1 = vertices[iv1-1].layer;
+		int layer_i2 = vertices[iv2-1].layer;
+		int max_layer = layer_i1 > layer_i2 ? layer_i1 : layer_i2;
+		vertices[i+num_inputs].layer = max_layer + 1;
+		
+		// if the list of vertices of the layer number N do not exists, creates and add the vertex into it
+		// if exists, just add the vertex into it
+		if(layers->size() < max_layer)
+		{
+			vector<int>* layer = new vector<int>;
+			layers->push_back(layer);
+			layer->push_back(i+num_inputs);
+		}
+		else
+		{
+			vector<int>* layer = layers->at(max_layer-1);
+			layer->push_back(i+num_inputs);
+		}		
+
+	}
+	
+	// updates the fanout of the output vertices
+	for(int i = 0; i < num_outputs; i++)
+	{
+		int output_index = outputs[i] >> 1;
+		vertices[output_index-1].fanout += 1;
+	}
+}
+
+// creates the graph used by the main function and
+// split the graph in layers of vertices
+void create_graph_and_split_in_layers(char* filename)
+{
+
+	// opens the input file
+	ifstream input_file;
+	input_file.open(filename, ios::binary | ios::in);
+
+	if(!input_file.is_open())
+	{
+		cerr << "Failed to open the input file." << endl;
+		exit(-1);
+	}
+
+	// process the 1st line
+	char buffer[256];
+	buffer[0] = '\0';
+	input_file.getline(buffer, sizeof(buffer));
+
+	// split into tokens, saving the values in variables
+	char* token = strtok(buffer," ");
+	token = strtok(NULL, " ");
+	num_variables = atoi(token);
+	token = strtok(NULL, " ");
+	num_inputs = atoi(token);
+	token = strtok(NULL, " ");
+	num_latches = atoi(token);
+	token = strtok(NULL, " ");
+	num_outputs = atoi(token);
+	token = strtok(NULL, " ");
+	num_ands = atoi(token);
+
+	// file format check
+	if(strlen(buffer) > 2 && buffer[0] == 'a' && buffer[1] == 'a' && buffer[2] == 'g')
+	{
+		cout << endl <<  "Processing AIG in the ASCII format..." << endl;
+		cout << "M I L O A = " << num_variables << " " << num_inputs << " " << num_latches
+			 << " " << num_outputs << " " << num_ands << endl;
+		process_ascii_format(input_file);
+	}
+	else if(strlen(buffer) > 2 && buffer[0] == 'a' && buffer[1] == 'i' && buffer[2] == 'g')
+	{
+		cout << endl << "Processing AIG in the binary format..." << endl;
+		cout << "M I L O A = " << num_variables << " " << num_inputs << " " << num_latches
+			 << " " << num_outputs << " " << num_ands << endl;
+		process_binary_format(input_file);
+	}
+	else {
+		cerr << "Failed to process the input file. Wrong, invalid or unknown format." << endl;
+		exit(-1);
 	}
 
 }
@@ -644,7 +831,12 @@ int main(int argc, char* argv[])
 					// get the cost of the cuts
 					cut1_cost = cut_costs[leaf1_vertex_index*max_cuts + j];
 					cut2_cost = cut_costs[leaf2_vertex_index*max_cuts + k];
-					product_cost = (cut1_cost + cut2_cost) / (float) vertices[vertex_index].fanout;
+					if(vertices[vertex_index].fanout == 0)
+					{
+						cerr << "Found a vertex (" << (vertex_index+1)*2 << ") with fanout = 0." << endl;
+						exit(-1);
+					}
+					else product_cost = (cut1_cost + cut2_cost) / (float) vertices[vertex_index].fanout;
 
 					// if the cuts cost is not negative, make the product
 					if(cut1_cost < 0 || cut2_cost < 0) continue;
