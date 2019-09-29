@@ -49,7 +49,7 @@ An AIG graph of up to 1.073.741.824 vertices.
 Linear, directly proportional to the number of vertices.
 
 ### Performance notes
-The algoritm was tested for very large graphs. In an 8GB RAM Intel Core-i7 machine, the algorithm takes about 1 second to process 1.6 million of vertices with `k = 2` and `i = 6`. In general, the lower the values of `i` and `k`, the lower the memory usage and execution time.
+The algorithm was tested for very large graphs. In an 8GB RAM Intel Core-i7 machine, the algorithm takes about 1 second to process 1.6 million of vertices with `k = 2` and `i = 6`. In general, the lower the values of `i` and `k`, the lower the memory usage and execution time.
 	
 For small AIG graphs (up to 1000 vertices), graph data is expected
 to fit entirely into the L1 cache of modern processors,
