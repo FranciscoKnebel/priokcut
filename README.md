@@ -51,9 +51,7 @@ Linear, directly proportional to the number of vertices.
 ### Performance notes
 
 Practical applications of this algorithm can operate on graphs
-of up to one million vertices. For these graphs, memory usage is
-approximately 50 to 100 MB, depending on the values
-of `i` and `k`. In general, the lower the values of `i` and `k`, the lower the memory usage and execution time.
+of up to one to ten million vertices. For these graphs, the execution time is between 0.5 to 10 seconds. In general, the lower the values of `i` and `k`, the lower the memory usage and execution time.
 	
 For small AIG graphs (up to 1000 vertices), graph data is expected
 to fit entirely into the L1 cache of modern processors,
