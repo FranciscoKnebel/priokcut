@@ -248,7 +248,7 @@ void process_ascii_format(ifstream& input_file)
 		}
 
 		// integrity check #10
-		if(i1 < 2 || i2 < 2)
+		if(i1 < 0 || i2 < 0)
 		{
 			cerr << "The vertex has an invalid value for its inputs." << endl;
 			cerr << "Found i1=" << i1 << " and i2=" << i2 << " for the label " << label << "." << endl;
@@ -267,16 +267,20 @@ void process_ascii_format(ifstream& input_file)
 		vertices[i+num_inputs].i1 = i1;
 		vertices[i+num_inputs].i2 = i2;
 		vertices[i+num_inputs].fanout = 0;
-		edges[i<<1] = i1 / 2 - 1;
-		edges[(i<<1)+1] = i2 / 2 - 1;
+		if(i1 >= 2) edges[i<<1] = i1 / 2 - 1;
+		else edges[i<<1] = -i1-2;
+		if(i2 >= 2)	edges[(i<<1)+1] = i2 / 2 - 1;
+		else edges[(i<<1)+1] = -i2-2;
 		int iv1 = i1 >> 1;
 		int iv2 = i2 >> 1;
-		vertices[iv1-1].fanout += 1;
-		vertices[iv2-1].fanout += 1;
+		if(i1 >= 2) vertices[iv1-1].fanout += 1;
+		if(i2 >= 2) vertices[iv2-1].fanout += 1;
 		
 		// evaluate and saves the vertex layer number
-		int layer_i1 = vertices[iv1-1].layer;
-		int layer_i2 = vertices[iv2-1].layer;
+		int layer_i1 = 1;
+		if(i1 >= 2) layer_i1 = vertices[iv1-1].layer;
+		int layer_i2 = 1;
+		if(i2 >= 2) layer_i2 = vertices[iv2-1].layer;
 		int max_layer = layer_i1 > layer_i2 ? layer_i1 : layer_i2;
 		vertices[i+num_inputs].layer = max_layer + 1;
 		
@@ -407,7 +411,7 @@ void process_binary_format(ifstream& input_file)
 		}
 
 		// integrity check #10
-		if(i1 < 2 || i2 < 2)
+		if(i1 < 0 || i2 < 0)
 		{
 			cerr << "The vertex has an invalid value for its inputs." << endl;
 			cerr << "Found i1=" << i1 << " and i2=" << i2 << " for the label " << label << "." << endl;
@@ -426,16 +430,20 @@ void process_binary_format(ifstream& input_file)
 		vertices[i+num_inputs].i1 = i1;
 		vertices[i+num_inputs].i2 = i2;
 		vertices[i+num_inputs].fanout = 0;
-		edges[i<<1] = i1 / 2 - 1;
-		edges[(i<<1)+1] = i2 / 2 - 1;
+		if(i1 >= 2) edges[i<<1] = i1 / 2 - 1;
+		else edges[i<<1] = -i1-2;
+		if(i2 >= 2)	edges[(i<<1)+1] = i2 / 2 - 1;
+		else edges[(i<<1)+1] = -i2-2;
 		int iv1 = i1 >> 1;
 		int iv2 = i2 >> 1;
-		vertices[iv1-1].fanout += 1;
-		vertices[iv2-1].fanout += 1;
+		if(i1 >= 2) vertices[iv1-1].fanout += 1;
+		if(i2 >= 2) vertices[iv2-1].fanout += 1;
 		
 		// evaluate and saves the vertex layer number
-		int layer_i1 = vertices[iv1-1].layer;
-		int layer_i2 = vertices[iv2-1].layer;
+		int layer_i1 = 1;
+		if(i1 >= 2) layer_i1 = vertices[iv1-1].layer;
+		int layer_i2 = 1;
+		if(i2 >= 2) layer_i2 = vertices[iv2-1].layer;
 		int max_layer = layer_i1 > layer_i2 ? layer_i1 : layer_i2;
 		vertices[i+num_inputs].layer = max_layer + 1;
 		
@@ -829,8 +837,10 @@ int main(int argc, char* argv[])
 					cut2_inputs.clear();
 
 					// get the cost of the cuts
-					cut1_cost = cut_costs[leaf1_vertex_index*max_cuts + j];
-					cut2_cost = cut_costs[leaf2_vertex_index*max_cuts + k];
+					if(leaf1_vertex_index >= 0) cut1_cost = cut_costs[leaf1_vertex_index*max_cuts + j];
+					else cut1_cost = 0.0;
+					if(leaf2_vertex_index >= 0) cut2_cost = cut_costs[leaf2_vertex_index*max_cuts + k];
+					else cut2_cost = 0.0;
 					if(vertices[vertex_index].fanout == 0)
 					{
 						cerr << "Found a vertex (" << (vertex_index+1)*2 << ") with fanout = 0." << endl;
@@ -843,10 +853,18 @@ int main(int argc, char* argv[])
 					else 
 					{
 						// get the inputs of the cuts
-						for(int l = 0; l < max_inputs; l++)
-							cut1_inputs.push_back(cut_inputs[leaf1_vertex_index*cut_offset+j*max_inputs+l]);
-						for(int l = 0; l < max_inputs; l++)
-							cut2_inputs.push_back(cut_inputs[leaf2_vertex_index*cut_offset+k*max_inputs+l]);
+						if(leaf1_vertex_index >= 0)
+						{
+							for(int l = 0; l < max_inputs; l++)
+								cut1_inputs.push_back(cut_inputs[leaf1_vertex_index*cut_offset+j*max_inputs+l]);
+						}
+						else cut1_inputs.push_back(-(leaf1_vertex_index+2));
+						if(leaf2_vertex_index >= 0)
+						{
+							for(int l = 0; l < max_inputs; l++)
+								cut2_inputs.push_back(cut_inputs[leaf2_vertex_index*cut_offset+k*max_inputs+l]);
+						}
+						else cut2_inputs.push_back(-(leaf2_vertex_index+2));
 						for(int l = 0; l < cut1_inputs.size(); l++)
 							if(cut1_inputs.at(l) != -1)
 								product.push_back(cut1_inputs.at(l));
