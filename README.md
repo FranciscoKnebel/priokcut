@@ -10,7 +10,7 @@ The algorithm manages the memory in a very efficient manner.
 ```
 g++ priokcuts.cpp -o priokcuts
 ```
-2. Call the program, passing the AIG file (in the AIGER ASCII format) as an argument:
+2. Call the program, passing the AIG file as an argument:
 ```
 ./priokcuts aiger/example.aag
 ```
