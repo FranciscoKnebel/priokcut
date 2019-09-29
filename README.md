@@ -1,6 +1,6 @@
 # Priority K-cut Algorithm Implementation
 
-Given an AIG graph file in the AIGER ASCII format, the program evaluates the priority K-cuts for all the vertices. You can set
+Given an AIG graph file in the AIGER format, the program evaluates the priority K-cuts for all the vertices. You can set
 the maximum number of cuts (`k`) for each vertex and the number of inputs (`i`) for each cut.
 
 The algorithm manages the memory in a very efficient manner.
@@ -10,7 +10,7 @@ The algorithm manages the memory in a very efficient manner.
 ```
 g++ priokcuts.cpp -o priokcuts
 ```
-2. Call the program, passing the AIG file (in the AIGER ASCII format) as an argument:
+2. Call the program, passing the AIG file in the ASCII or binary format as an argument:
 ```
 ./priokcuts aiger/example.aag
 ```
@@ -49,15 +49,11 @@ An AIG graph of up to 1.073.741.824 vertices.
 Linear, directly proportional to the number of vertices.
 
 ### Performance notes
-
-Practical applications of this algorithm can operate on graphs
-of up to one million vertices. For these graphs, memory usage is
-approximately 50 to 100 MB, depending on the values
-of `i` and `k`. In general, the lower the values of `i` and `k`, the lower the memory usage and execution time.
+The algorithm was tested for very large graphs. In an 8GB RAM Intel Core-i7 machine, the algorithm takes about 1 second to process 1.6 million of vertices with `k = 2` and `i = 6`. In general, the lower the values of `i` and `k`, the lower the memory usage and execution time.
 	
 For small AIG graphs (up to 1000 vertices), graph data is expected
 to fit entirely into the L1 cache of modern processors,
-leading to extremely fast executions.
+leading to extremely fast executions (less than 1 ms).
 
 ### Licence
 
