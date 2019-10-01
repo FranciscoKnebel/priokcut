@@ -3,7 +3,7 @@
 Given an AIG file in the AIGER format (binary or ASCII), the program evaluates the priority K-cuts for all the vertices. You can set the maximum number of cuts (`k`) for each vertex and the number of inputs (`i`) for each cut.
 
 ### Usage
-1. Compile the source code (`-O3` is optional but recommended)
+1. Compile the source code (`-O3` is optional but recommended to enhance execution time)
 ```
 g++ -O3 priokcuts.cpp -o priokcuts
 ```
