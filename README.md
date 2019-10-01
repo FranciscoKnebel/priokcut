@@ -20,7 +20,7 @@ There are some basic options. You can:
 ```
 ./priokcuts aiger/example.aag -i 6
 ```
-* Display the results on screen (this slow down the execution time for large graphs)
+* Display the results on screen (this slows down the execution time for large graphs)
 ```
 ./priokcuts aiger/example.aag -d
 ```
