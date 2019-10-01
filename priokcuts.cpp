@@ -44,11 +44,9 @@ using namespace std;
 		Intel Core-i7 machine, the algorithm takes about 1 second to
 		process 1.6 million of vertices with k = 2 and i = 6.
 		In general, the lower the values of i and k, the lower
-		the memory usage and execution time.
-	
-		For small AIG graphs (up to 10000 vertices), graph data is expected
-		to fit entirely into the L1 cache of modern processors,
-		leading to extremely fast executions. */
+		the memory usage and execution time.  However, the rate 
+		execution time / number of vertices remains constant
+		regardless the values of k and i.
 
 
 /*
