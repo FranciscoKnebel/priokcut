@@ -26,7 +26,7 @@ There are some basic options. You can:
 ```
 
 ### Limitations
-The program do not support AIG with latches yet.
+The program do not support AIGs with latches yet.
 
 ### Memory usage
 
