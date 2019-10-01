@@ -1,16 +1,13 @@
 # Priority K-cut Algorithm Implementation
 
-Given an AIG graph file in the AIGER format, the program evaluates the priority K-cuts for all the vertices. You can set
-the maximum number of cuts (`k`) for each vertex and the number of inputs (`i`) for each cut.
-
-The algorithm manages the memory in a very efficient manner.
+Given an AIG file in the AIGER format (binary or ASCII), the program evaluates the priority K-cuts for all the vertices. You can set the maximum number of cuts (`k`) for each vertex and the number of inputs (`i`) for each cut.
 
 ### Usage
-1. Compile the source code:
+1. Compile the source code (`-O3` is optional but recommended)
 ```
-g++ priokcuts.cpp -o priokcuts
+g++ -O3 priokcuts.cpp -o priokcuts
 ```
-2. Call the program, passing the AIG file in the ASCII or binary format as an argument:
+2. Call the program. The path of the AIG file is the only required argument. Both binary and ASCII formats are accepted, but binary files runs faster.
 ```
 ./priokcuts aiger/example.aag
 ```
@@ -29,16 +26,17 @@ There are some basic options. You can:
 ```
 
 ### Limitations
-The program do not support AIG graphs with latches yet.
+The program do not support AIG with latches yet.
 
-###	Memory usage
+### Memory usage
 
-Running the program to compute the `k` cuts with `i` inputs for an AIG graph with `M` vertices and `E` edges uses:
+Running the program to compute the `k` cuts with `i` inputs for an AIG graph with `M` uses:
 
-* `4*E` bytes to store the edges
 * `16*M` bytes to store the vertices
 * `(4+4*i)*k*M` bytes for the cuts
 * `4*M` bytes for auxiliary data
+
+For very large graphs, make sure your machine have enought memory!
 
 ### Theoretical capacity
 
@@ -49,7 +47,7 @@ An AIG graph of up to 1.073.741.824 vertices.
 Linear, directly proportional to the number of vertices.
 
 ### Performance notes
-The algorithm was tested for very large graphs. In an 8GB RAM Intel Core-i7 machine, the algorithm takes about 1 second to process 1.6 million of vertices with `k = 2` and `i = 6`. In general, the lower the values of `i` and `k`, the lower the memory usage and execution time.
+The algorithm was tested for very large graphs. In an 8GB RAM Intel Core-i7 machine, the algorithm takes about 1 second to process 1.6 million of vertices with `k = 2` and `i = 6`. In general, the lower the values of `i` and `k`, the lower the memory usage and execution time. However, the rate `execution time / number of vertices` remains constant regardless the values of `k` or `i`.
 	
 For small AIG graphs (up to 1000 vertices), graph data is expected
 to fit entirely into the L1 cache of modern processors,
