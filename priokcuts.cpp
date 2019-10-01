@@ -25,11 +25,10 @@ using namespace std;
 
 /*	MEMORY USAGE vs. AIG SIZE and other parameters
 	
-		Let M be the number of vertices, E the number of edges, I the maximum number
+		Let M be the number of vertices, I the maximum number
 		of inputs allowed in the cuts and K the maximum number of cuts for each
 		vertex. So, the algorithm will use:
 
-		4 * E bytes to store the edges
 		16 * M bytes to store the vertices
 		(4 + 4 * I) * K * M bytes for the cuts
 		4 * M bytes for auxiliary data */
@@ -931,7 +930,6 @@ int main(int argc, char* argv[])
 			for(int i = 0; i < next_layer->size(); i++) print_cuts(next_layer->at(i));
 		}
 		layer_number++;
-
 	}
 
 	// evaluates the execution time
