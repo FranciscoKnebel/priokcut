@@ -36,7 +36,7 @@ Running the program to compute the `k` cuts with `i` inputs for an AIG graph wit
 * `(4+4*i)*k*M` bytes for the cuts
 * `4*M` bytes for auxiliary data
 
-For very large graphs, make sure your machine have enought memory!
+For very large graphs, make sure your machine have enough memory!
 
 ### Theoretical capacity
 
