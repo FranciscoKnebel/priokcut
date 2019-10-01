@@ -30,7 +30,7 @@ The program do not support AIGs with latches yet.
 
 ### Memory usage
 
-Running the program to compute the `k` cuts with `i` inputs for an AIG graph with `M` uses:
+Running the program to compute the `k` cuts with `i` inputs for an AIG graph with `M` vertices uses:
 
 * `16*M` bytes to store the vertices
 * `(4+4*i)*k*M` bytes for the cuts
