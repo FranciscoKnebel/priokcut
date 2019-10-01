@@ -7,7 +7,7 @@
 // Description: Priority K-cut Algorithm Implementation
 //
 // Revision:
-// Revision 1.0 - Improving memory performance
+// Revision 2.0 - Performance enhancement
 //
 //////////////////////////////////////////////////////////////////////////////////
 
@@ -40,10 +40,11 @@ using namespace std;
 
 /*	MEMORY USAGE IN TYPICAL APPLICATIONS AND USAGE OF CACHE MEMORY
 
-		Practical applications of this algorithm can operate on graphs
-		of up to one million vertices. For these graphs, memory usage is
-		approximately 50 to 100 MB, depending on the values
-		of K and I.
+		The algorithm was tested for very large graphs. In an 8GB RAM
+		Intel Core-i7 machine, the algorithm takes about 1 second to
+		process 1.6 million of vertices with k = 2 and i = 6.
+		In general, the lower the values of i and k, the lower
+		the memory usage and execution time.
 	
 		For small AIG graphs (up to 10000 vertices), graph data is expected
 		to fit entirely into the L1 cache of modern processors,

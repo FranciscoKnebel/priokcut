@@ -4,10 +4,10 @@
 // Engineer: Rafael de Oliveira Calçada
 //
 // Create Date: 19.09.2019 16:12:57
-// Description: Priority K-cut Algorithm Implementation
+// Description: Converts an binary AIG to ASCII format
 //
 // Revision:
-// Revision 1.0 - Improving memory performance
+// Revision 0.01 - File created
 //
 //////////////////////////////////////////////////////////////////////////////////
 
