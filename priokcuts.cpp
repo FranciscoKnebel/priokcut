@@ -56,7 +56,6 @@ using namespace std;
  ********************************************************************************/
 
 // structures that forms the AIG graph
-typedef int edge;
 
 typedef struct v {
 	int i1;
@@ -67,7 +66,6 @@ typedef struct v {
 
 // 'lists' that describes the AIG
 vertex* vertices;
-edge* edges;
 int* outputs;
 
 // global variables that describes the AIG
@@ -139,7 +137,6 @@ void process_ascii_format(ifstream& input_file)
 	// OK. Now we're ready for memory allocation
 	outputs = new int[num_outputs];
 	vertices = new vertex[num_variables];
-	edges = new edge[(num_ands << 1)];
 
 	// initialization of output list
 	for(int i = 0; i < num_outputs; i++) outputs[i] = -1;
@@ -264,13 +261,11 @@ void process_ascii_format(ifstream& input_file)
 		}
 
 		// if reached here, everything is OK, so adds the vertex into in the list, creates its edges, and updates the fanout of the child vertices
-		vertices[i+num_inputs].i1 = i1;
-		vertices[i+num_inputs].i2 = i2;
 		vertices[i+num_inputs].fanout = 0;
-		if(i1 >= 2) edges[i<<1] = i1 / 2 - 1;
-		else edges[i<<1] = -i1-2;
-		if(i2 >= 2)	edges[(i<<1)+1] = i2 / 2 - 1;
-		else edges[(i<<1)+1] = -i2-2;
+		if(i1 >= 2) vertices[i+num_inputs].i1 = i1 / 2 - 1;
+		else vertices[i+num_inputs].i1 = -i1-2;
+		if(i2 >= 2)	vertices[i+num_inputs].i2 = i2 / 2 - 1;
+		else vertices[i+num_inputs].i2 = -i2-2;
 		int iv1 = i1 >> 1;
 		int iv2 = i2 >> 1;
 		if(i1 >= 2) vertices[iv1-1].fanout += 1;
@@ -332,7 +327,6 @@ void process_binary_format(ifstream& input_file)
 	// OK. Now we're ready for memory allocation
 	outputs = new int[num_outputs];
 	vertices = new vertex[num_variables];
-	edges = new edge[(num_ands << 1)];
 
 	// initialization of output list
 	for(int i = 0; i < num_outputs; i++) outputs[i] = -1;
@@ -427,13 +421,11 @@ void process_binary_format(ifstream& input_file)
 		}
 
 		// if reached here, everything is OK, so adds the vertex into in the list, creates its edges, and updates the fanout of the child vertices
-		vertices[i+num_inputs].i1 = i1;
-		vertices[i+num_inputs].i2 = i2;
 		vertices[i+num_inputs].fanout = 0;
-		if(i1 >= 2) edges[i<<1] = i1 / 2 - 1;
-		else edges[i<<1] = -i1-2;
-		if(i2 >= 2)	edges[(i<<1)+1] = i2 / 2 - 1;
-		else edges[(i<<1)+1] = -i2-2;
+		if(i1 >= 2) vertices[i+num_inputs].i1 = i1 / 2 - 1;
+		else vertices[i+num_inputs].i1 = -i1-2;
+		if(i2 >= 2)	vertices[i+num_inputs].i2 = i2 / 2 - 1;
+		else vertices[i+num_inputs].i2 = -i2-2;
 		int iv1 = i1 >> 1;
 		int iv2 = i2 >> 1;
 		if(i1 >= 2) vertices[iv1-1].fanout += 1;
@@ -818,8 +810,8 @@ int main(int argc, char* argv[])
 			}
 			
 			// cartesian product
-			int leaf1_vertex_index = edges[(vertex_index-num_inputs)*2];
-			int leaf2_vertex_index = edges[(vertex_index-num_inputs)*2+1];
+			int leaf1_vertex_index = vertices[vertex_index].i1;
+			int leaf2_vertex_index = vertices[vertex_index].i2;
 			vector<int> product;
 			vector<int> cut1_inputs;
 			vector<int> cut2_inputs;
