@@ -4,7 +4,7 @@
 // Engineer: Rafael de Oliveira Calçada
 //
 // Create Date: 19.09.2019 16:12:57
-// Description: Converts an binary AIG to ASCII format
+// Description: Converts a binary AIG to ASCII format
 //
 // Revision:
 // Revision 0.01 - File created
