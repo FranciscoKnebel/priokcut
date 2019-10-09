@@ -189,22 +189,22 @@ int main(int argc, char* argv[])
 {
 
     // set default values
-	p = 2;
-	k = 4;
-	display = false;
+    p = 2;
+    k = 4;
+    display = false;
 
     // check for correct usage
-	if(argc < 2)
-	{
-		show_help(argv);
-		return -1;
-	}
+    if(argc < 2)
+    {
+        show_help(argv);
+        return -1;
+    }
 
     // process the arguments
     process_args(argc, argv, filename, display, p, k);
 
     // initializes the time counter
-	clock_t execution_start = clock();
+    clock_t execution_start = clock();
 
     // creates the graph
     create_graph(filename, M, I, L, O, A, vertices, outputs);
@@ -224,35 +224,35 @@ int main(int argc, char* argv[])
      * The iteration stops when the stack is empty.
      *************************************************************************/
 
-	clock_t computation_start = clock();
+    clock_t computation_start = clock();
 
     // allocates memory for the cuts
     int cost_offset = p;
-	int input_offset = p*k;
-	cut_costs = new float[M*p];
-	cut_inputs = new int[M*p*k];
+    int input_offset = p*k;
+    cut_costs = new float[M*p];
+    cut_inputs = new int[M*p*k];
 
     // set to zero the cost of each input vertex cut
-	// fill blank spaces left in the vector with -1
+    // fill blank spaces left in the vector with -1
     // set the winner cut of each input
-	for(int i = 0; i < I; i++)
-	{
+    for(int i = 0; i < I; i++)
+    {
         vertices[i].winner = i;
-		cut_costs[(i*cost_offset)] = 0;
-		cut_inputs[i*input_offset] = (i+1) << 1;
-		for(int l = 1; l < k; l++) cut_inputs[i*input_offset+l] = -1;
-		for(int j = 1; j < p; j++)
-		{
-			cut_costs[(i*cost_offset) + j] = -1;
-			for(int l = 0; l < k; l++) cut_inputs[i*input_offset+j*k+l] = -1;
-		}
-	}
+        cut_costs[(i*cost_offset)] = 0;
+        cut_inputs[i*input_offset] = (i+1) << 1;
+        for(int l = 1; l < k; l++) cut_inputs[i*input_offset+l] = -1;
+        for(int j = 1; j < p; j++)
+        {
+            cut_costs[(i*cost_offset) + j] = -1;
+            for(int l = 0; l < k; l++) cut_inputs[i*input_offset+j*k+l] = -1;
+        }
+    }
 
     // allocates the auxiliary stack
     stk = new stack<int, std::vector<int>>;
 
-	/* EVALUATE THE PRIORITY K-CUTS
-	**************************************************************************/
+    /* EVALUATE THE PRIORITY K-CUTS
+    **************************************************************************/
     for(int i = 0; i < O; i++)
     {
         int vertex_index = (outputs[i] >> 1) - 1;
