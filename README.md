@@ -30,7 +30,7 @@ The program do not support AIGs with latches yet.
 
 ### Memory usage
 
-Running the program to compute `p` cuts for each vertex (each cut with `i` inputs) for an AIG with `M` vertices uses:
+Running the program to compute `p` cuts for each vertex (each cut with `k` inputs) for an AIG with `M` vertices uses:
 
 * `16*M` bytes to store the vertices
 * `4*(k+1)*p*M` bytes to store the cuts
