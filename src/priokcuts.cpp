@@ -214,8 +214,8 @@ int main(int argc, char* argv[])
     evaluate_time("Time taken to load the AIG in the main memory: ", execution_start, end);
 
     /* ABOUT THE ALGORITHM
-	 *
-	 * At start, the cost of all input vertices are set to zero.
+     *
+     * At start, the cost of all input vertices are set to zero.
      * Then, for each output vertex, the algorithm iteratively checks if the
      * left and right child vertices have non null cost. If yes,
      * evaluate the priority k-cuts based on the child cuts.
