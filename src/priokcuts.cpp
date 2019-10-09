@@ -51,7 +51,7 @@ bool in_the_list(int vertex_index, vector<int>* list);
 int winner_cut(int vertex_index, float* cut_costs, int& p);
 int loser_cut(int vertex_index, float* cut_costs, int& p);
 
-/* COMPUTES THE K-CUTS A VERTEX
+/* COMPUTES THE K-CUTS FOR A VERTEX
  * Return value: the index of the winner cut
 *****************************************************************************/
 int compute_kcuts(int vertex_index, int left_index, int right_index, int input_offset)
